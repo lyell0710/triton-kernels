@@ -20,7 +20,8 @@ def _gemm_kernel(A, B, C,
                  stride_am, stride_ak, stride_bk, stride_bn,
                  stride_cm, stride_cn,
                  BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
-                 BLOCK_K: tl.constexpr, GROUP_M: tl.constexpr):
+                 BLOCK_K: tl.constexpr, GROUP_M: tl.constexpr,
+                 IEEE_DOT: tl.constexpr):
     pid = tl.program_id(0)
     # L2 友好的 grouped 调度:同组内先走 M 方向,提高 B 块复用
     num_pid_m = tl.cdiv(M, BLOCK_M)
@@ -44,7 +45,10 @@ def _gemm_kernel(A, B, C,
                     & (offs_k[None, :] + k0 < K), other=0.0)
         b = tl.load(b_ptrs, mask=(offs_k[:, None] + k0 < K)
                     & (offs_n[None, :] < N), other=0.0)
-        acc = tl.dot(a, b, acc)
+        if IEEE_DOT:
+            acc += tl.dot(a, b, input_precision="ieee")
+        else:
+            acc = tl.dot(a, b, acc)
         a_ptrs += BLOCK_K * stride_ak
         b_ptrs += BLOCK_K * stride_bk
 
@@ -55,8 +59,12 @@ def _gemm_kernel(A, B, C,
 
 def gemm(a: torch.Tensor, b: torch.Tensor,
          block_m=128, block_n=128, block_k=64, group_m=8,
-         num_warps=8, num_stages=3) -> torch.Tensor:
+         num_warps=8, num_stages=None) -> torch.Tensor:
     """a: (M,K), b: (K,N),fp16 输入 fp32 累加输出 fp16。"""
+    if num_stages is None:
+        num_stages = 2 if a.dtype == torch.float32 else 3
+    if a.dtype == torch.float32:
+        block_n = min(block_n, 64)
     M, K = a.shape
     K2, N = b.shape
     assert K == K2 and a.is_cuda
@@ -66,17 +74,21 @@ def gemm(a: torch.Tensor, b: torch.Tensor,
                        a.stride(0), a.stride(1), b.stride(0), b.stride(1),
                        c.stride(0), c.stride(1),
                        BLOCK_M=block_m, BLOCK_N=block_n, BLOCK_K=block_k,
-                       GROUP_M=group_m,
+                       GROUP_M=group_m, IEEE_DOT=(a.dtype == torch.float32),
                        num_warps=num_warps, num_stages=num_stages)
     return c
 
 
 def linear(x: torch.Tensor, weight: torch.Tensor, bias=None,
            **cfg) -> torch.Tensor:
-    """nn.Linear 语义:y = x @ W^T + b。W: (out,in)——供 llm-engine D16 接入。"""
+    """nn.Linear 语义:y = x @ W^T + b。W: (out,in)——供 llm-engine D16 接入。
+    小 M(decode)自适应缩 tile:BLOCK_M=128 在 M=1 时 127/128 全废。"""
     shp = x.shape
-    y = gemm(x.reshape(-1, shp[-1]).contiguous().half(),
-             weight.t().contiguous().half(), **cfg)
+    x2 = x.reshape(-1, shp[-1]).contiguous()
+    if "block_m" not in cfg:
+        cfg["block_m"] = 128 if x2.shape[0] >= 128 else (
+            32 if x2.shape[0] >= 32 else 16)
+    y = gemm(x2.to(weight.dtype), weight.t().contiguous(), **cfg)
     if bias is not None:
-        y += bias
+        y = y + bias
     return y.reshape(*shp[:-1], weight.shape[0]).to(x.dtype)

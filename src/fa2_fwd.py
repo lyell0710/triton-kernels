@@ -29,6 +29,7 @@ def _fa2_fwd_kernel(
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
+    IEEE_DOT: tl.constexpr,
 ):
     pid_m = tl.program_id(0)          # 第几个 Q 行块
     pid_bh = tl.program_id(1)         # batch*q_head 扁平索引
@@ -61,7 +62,10 @@ def _fa2_fwd_kernel(
         k = tl.load(k_ptrs, mask=curr_n[:, None] < n_ctx, other=0.0)
         v = tl.load(v_ptrs, mask=curr_n[:, None] < n_ctx, other=0.0)
 
-        qk = tl.dot(q, tl.trans(k)) * sm_scale          # (M, N) fp32
+        if IEEE_DOT:   # fp32 复跑证明算法精确性时关 TF32(10 位尾数)
+            qk = tl.dot(q, tl.trans(k), input_precision="ieee") * sm_scale
+        else:
+            qk = tl.dot(q, tl.trans(k)) * sm_scale      # (M, N) fp32
         qk = tl.where(curr_n[None, :] < n_ctx, qk, float("-inf"))
         if IS_CAUSAL:
             qk = tl.where(offs_m[:, None] >= curr_n[None, :], qk, float("-inf"))
@@ -71,7 +75,10 @@ def _fa2_fwd_kernel(
         alpha = tl.exp(m_i - m_new)
         p = tl.exp(qk - m_new[:, None])
         l_i = l_i * alpha + tl.sum(p, 1)
-        acc = acc * alpha[:, None] + tl.dot(p.to(v.dtype), v)
+        if IEEE_DOT:
+            acc = acc * alpha[:, None] + tl.dot(p, v, input_precision="ieee")
+        else:
+            acc = acc * alpha[:, None] + tl.dot(p.to(v.dtype), v)
         m_i = m_new
 
     acc = acc / l_i[:, None]
@@ -83,10 +90,19 @@ def _fa2_fwd_kernel(
 
 def fa2_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
                 causal: bool = True, sm_scale: float | None = None,
-                block_m: int = 128, block_n: int = 64,
-                num_warps: int = 8, num_stages: int = 2) -> torch.Tensor:
-    """q: (B, Hq, S, D); k/v: (B, Hkv, S, D),Hq 必须是 Hkv 的整数倍。"""
+                block_m: int | None = None, block_n: int = 64,
+                num_warps: int | None = None,
+                num_stages: int | None = None) -> torch.Tensor:
+    """q: (B, Hq, S, D); k/v: (B, Hkv, S, D),Hq 必须是 Hkv 的整数倍。
+    tile 按 dtype 自适应:fp32 的 tile 字节翻倍,BM128 会超 Ada 100KB
+    shared memory 上限(EXP-T01 实测),故 fp32 降 BM64/w4。"""
     B, Hq, S, D = q.shape
+    if block_m is None:
+        block_m = 32 if q.dtype == torch.float32 else 128
+    if num_warps is None:
+        num_warps = 4 if q.dtype == torch.float32 else 8
+    if num_stages is None:
+        num_stages = 1 if q.dtype == torch.float32 else 2
     Hkv = k.shape[1]
     assert Hq % Hkv == 0 and D in (64, 128) and q.is_cuda
     if sm_scale is None:
@@ -99,6 +115,7 @@ def fa2_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
         S,
         NUM_Q_HEADS=Hq, GQA_GROUP=Hq // Hkv, HEAD_DIM=D,
         BLOCK_M=block_m, BLOCK_N=block_n, IS_CAUSAL=causal,
+        IEEE_DOT=(q.dtype == torch.float32),
         num_warps=num_warps, num_stages=num_stages,
     )
     return o
