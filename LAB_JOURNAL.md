@@ -16,3 +16,16 @@
   实证)、raw 3 组、README 红线表。
 - **下一步**:llm-engine EXP-D15/D16 接入(本仓 fa2_forward 与
   gemm_pipelined.linear 已按其 attention_impl/linear 契约留口)。
+## §2 fp32 通道 + 引擎接入协同(2026-08-23 深夜)
+
+- **做了什么**:为 llm-engine 的 FP32 复跑 gate 打通 fp32 通道——dtype
+  自适应 tile(fp32 字节翻倍,BM128 超 Ada 100KB shared 上限,两次 OOM
+  实测后定 BM32/stages1)+ IEEE dot 开关(TF32 的 3e-3 → 6e-7);linear
+  加小 M 自适应与混合策略支撑 D16。
+- **关键数字**:FA2 单层 fp32-IEEE 误差 6e-7(算法精确性证明);引擎级
+  FP32 probe 5.3e-5/8.0e-5 双 PASS;引擎 bench:FA2 TTFT -9.4%(0.6B)
+  /-6.5%(8B);triton-linear 0.6B regime 负结果 → 甜区边界闭环(theory/03)。
+- **事故**:一次 cwd 漂移把 D15/D16 记录写进本仓(已移回 llm-engine,
+  本仓自检归零)——批量脚本首行显式 cd,教训第 N 次。
+- **产物**:fa2_fwd/gemm_pipelined 的 fp32 路径;llm-engine#EXP-D15/D16
+  由本仓依赖支撑。
