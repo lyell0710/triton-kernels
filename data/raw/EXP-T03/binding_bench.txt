@@ -1,0 +1,5 @@
+# provenance: env=v0.25.1-venv sha=pre-commit cmd="torch_ext int8 binding bench (1024x1024 fp32, 300 iters)" date=2026-08-23T23:12:33+00:00 gpu="NVIDIA GeForce RTX 4090" driver=610.57.04
+correctness: q mismatch 0/1048576, scale err 0.0 (vs torch 参考)
+torch-ext(CUDA v4 kernel + torch 算 scale, 4 次 launch): 0.06509 ms
+triton 全融合(kernel 内算 scale, 1 次 launch):           0.05166 ms
+裸 CUDA bench 同 kernel(Kernel_Optimazation EXP-K01):    0.0059 ms(不含 scale 计算与 torch 封装)
