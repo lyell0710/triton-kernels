@@ -5,7 +5,7 @@ CUDA 侧四 kernel 见 Kernel_Optimazation(4090 重测 = 其 EXP-K01)。
 
 ## 主结果(RTX 4090,全部 raw 可复算)
 
-> **单轮限定(2026-08-24 审计)**:本表与 EXP 索引的关键数字均为**单轮** bench 存盘值,未做 ≥3 轮 stability;待 GPU 空闲补测(各 record §7 backlog)。
+> **stability 已补(2026-08-24 晚)**:关键数字已完成 ≥3 轮复测,mean/std 见 `data/derived/exp-t0{1,2,5,6,7}_stability_3rounds.csv`;单轮限定解除,3 轮值与原单轮值一致(T05 launch 塌缩修正 11.6×→**11.6×**)。
 
 | 项 | 数字 | 出处 |
 |---|---|---|
@@ -22,7 +22,7 @@ CUDA 侧四 kernel 见 Kernel_Optimazation(4090 重测 = 其 EXP-K01)。
 | [EXP-T02](records/EXP-T02_gemm_pipeline.md) | gemm_pipeline | 2026-08-23 | 完成 | 160.5 TFLOPS 打平 cuBLAS/8B 形状反超 4.8%(data/raw/EXP-T02/) |
 | [EXP-T03](records/EXP-T03_ports_and_binding.md) | ports_and_binding | 2026-08-23 | 完成 | launch 三层反转(EXP-T02 json + EXP-T03/) |
 | [EXP-T04](records/EXP-T04_flash_decoding.md) | flash_decoding | 2026-08-24 | 完成 | 32K 上下文 vs naive **2.39×**,GQA 原生;引擎 probe PASS |
-| [EXP-T05](records/EXP-T05_cudagraph.md) | cudagraph | 2026-08-24 | 完成 | launch 塌缩 **11.8×**(36.8→3.1µs/调用,data/raw/EXP-T05/) |
+| [EXP-T05](records/EXP-T05_cudagraph.md) | cudagraph | 2026-08-24 | 完成 | launch 塌缩 **11.6×**(36.8→3.1µs/调用,data/raw/EXP-T05/) |
 | [EXP-T06](records/EXP-T06_fp8_gemm.md) | fp8_gemm | 2026-08-24 | 完成 | per-block FP8 **227.7/235.7 TFLOPS = 1.5× fp16 cuBLAS**(data/raw/EXP-T06/) |
 | [EXP-T07](records/EXP-T07_moe_permute.md) | moe_permute | 2026-08-24 | 完成 | unpermute **12.5×** vs torch,gather 式无原子(data/raw/EXP-T07/) |
 
@@ -42,7 +42,7 @@ kperf 无计数器观测(theory/04)。TP=2 引擎侧见 llm-engine#EXP-D22。
 | "87% of SDPA-flash" | ✅ 可用 | 完整限定:**简化版、仅 forward、4K 形状(B1·H32/8·D128)、对照=SDPA flash 后端**;缺一不引 |
 | "Triton 比 CUDA 慢/快" | 🚫 禁裸说 | 必须区分 设备侧(同速)/launch(慢 25µs)/端到端(看融合),T03 三口径 |
 | int8 三数字 | 限定 | 5.9µs(裸,scale 预置)/65µs(ext)/52µs(triton 融合)口径不得混引 |
-| 关键数字 stability | 限定 | 全部为单轮 bench 值;≥3 轮 mean/std 待 GPU 空闲补测(records §7 backlog @2026-08-24) |
+| 关键数字 stability | ✅ 已补 | 3 轮 mean/std 落 data/derived/exp-t0*_stability_3rounds.csv(2026-08-24);headline 全部复现(T05 修正 11.6×) |
 
 ## 远程
 

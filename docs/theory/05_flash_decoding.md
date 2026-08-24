@@ -34,7 +34,7 @@ KV cache,曾把收益变负——kernel 快 ≠ 引擎快,拷贝藏在调用约�
 - **Q: 为什么不用 atomic 归并?** 部分量之间要按 m 重标定后才能加,
   原子加做不了非线性归并;两段式(或单 kernel + 跨 CTA 同步)是标准解。
 - **Q: 短上下文为什么不赢?** 两次 kernel launch 的固定成本(本机 ~90µs)
-  > 计算差;正解是 CUDA Graph(EXP-T05:launch 塌缩 11.8×)或 persistent
+  > 计算差;正解是 CUDA Graph(EXP-T05:launch 塌缩 11.6×)或 persistent
   kernel。
 
 ## 5. 延伸(锚点)

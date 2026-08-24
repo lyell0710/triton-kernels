@@ -41,3 +41,6 @@ backlog);tile 扫描未存 raw(终端级);raw provenance sha=pre-commit
 
 ## 8. 下游影响
 llm-engine#EXP-D15 接入(attention_impl 指针处);简历句候选见 README。
+
+- **backlog 闭环(2026-08-24 晚)**:≥3 轮 stability 已补——87.2%(1.1184±0.0015 vs sdpa 0.9749±0.0024,S=4096)——87% 口径维持。
+  raw = data/raw/EXP-T01/*_stability_r{1,2,3}.json,聚合 = data/derived/exp-t01_stability_3rounds.csv。

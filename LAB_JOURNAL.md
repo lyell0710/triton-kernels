@@ -68,3 +68,12 @@
 - **下一步**:GPU 空闲后按各 record §7 backlog 补 ≥3 轮 stability
   (mean/std 落 stability 文件),解锁 README"单轮"限定;本仓仍无远端,
   待用户建 GitHub repo 后 push(README「远程」节)。
+
+## §5 2026-08-24 晚 · stability backlog 闭环
+
+- **做了什么**:五 bench(T01/02/05/06/07)各 3 轮 UTC 前缀落盘 + 通用聚合器
+  (list 下钻 + 非有限值守卫)出 derived;README/红线表解除单轮限定。
+- **关键数字**:FA2 87.2%(3 轮)、GEMM 打平复现、**T05 修正 11.8×→11.6×**
+  (36.16±0.11/3.11)、fp8 228.1±1.3、moe 12.46×。
+- **产物**:data/raw/EXP-T0{1,2,5,6,7}/*_stability_r*.json + data/derived/*_3rounds.csv。
+- **下一步**:待用户建远端推送(仍无 remote)。

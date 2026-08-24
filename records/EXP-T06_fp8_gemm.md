@@ -46,3 +46,6 @@ BLOCK_N 硬绑 128(权重块对齐)——解耦需 sb 向量化,backlog。
 ## 8. 下游影响
 阶段二清单 FP8 GEMM 项闭环;面试句:"同一缩放代数在 Ada 用 mma 落地
 1.5×,并能讲清 DeepGEMM 为什么 Hopper-only"。
+
+- **backlog 闭环(2026-08-24 晚)**:≥3 轮 stability 已补——prequant 228.1±1.3 TFLOPS(227.7 单轮口径成立)。
+  raw = data/raw/EXP-T06/*_stability_r{1,2,3}.json,聚合 = data/derived/exp-t06_stability_3rounds.csv。

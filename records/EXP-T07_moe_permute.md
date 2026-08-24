@@ -46,3 +46,6 @@ GEMM 的 block 边界(接真实 fused_moe 时需要);跨卡版(all-to-all)不做
 ## 8. 下游影响
 阶段二 MoE Permute 项闭环;与 EXP-014(fused_moe 56.4%)拼成完整
 "MoE 层内时间去哪了"图景。
+
+- **backlog 闭环(2026-08-24 晚)**:≥3 轮 stability 已补——unpermute 1.053±0.002 / 0.0845±0.0001 ms = 12.46×(12.5× 口径维持)。
+  raw = data/raw/EXP-T07/*_stability_r{1,2,3}.json,聚合 = data/derived/exp-t07_stability_3rounds.csv。

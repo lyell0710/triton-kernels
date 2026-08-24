@@ -40,3 +40,6 @@ cudagraph_capture_sizes 即此);llm-engine 整 step 捕获未做(KV cache
 ## 8. 下游影响
 launch 三层结论(T03)补全为四层:设备同速 → 分发差 → 融合反转 →
 **graph 归零**;theory/03 增补。
+
+- **backlog 闭环(2026-08-24 晚)**:≥3 轮 stability 已补——eager 36.16±0.11µs / replay 3.11±0.00µs → 塌缩修正 11.8×→11.6×。
+  raw = data/raw/EXP-T05/*_stability_r{1,2,3}.json,聚合 = data/derived/exp-t05_stability_3rounds.csv。

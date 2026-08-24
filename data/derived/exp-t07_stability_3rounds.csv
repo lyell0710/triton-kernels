@@ -1,0 +1,12 @@
+# provenance: derived from data/raw/EXP-T07/*_stability_r{1,2,3}.json by inline aggregator, 2026-08-24
+metric,mean,std,rel_std_pct
+bench.index_build_ms,0.2396,0.0004,0.17
+bench.torch_permute_ms,0.145767,5.77e-05,0.04
+bench.torch_unpermute_ms,1.05297,0.00214,0.20
+bench.triton_permute_ms,0.0805333,5.77e-05,0.07
+bench.triton_unpermute_ms,0.0845333,5.77e-05,0.07
+roundtrip_err,0.00763297,0,0.00
+shape.D,2048,0,0.00
+shape.E,60,0,0.00
+shape.T,4096,0,0.00
+shape.topk,4,0,0.00

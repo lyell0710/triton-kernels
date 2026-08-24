@@ -45,7 +45,7 @@ kernel 里;裸 CUDA 扩展量级 ~5.9µs(int8 v4,EXP-K01,scale 预置口径);
 3 次前置 launch" 的 65.1µs——融合数比单核快慢更重要。」
 - int8 三数字(5.9 裸 / 65.1 ext / 51.7 融合)口径不得混引(红线表);
   融合数字跨会话波动 41.6~52µs,引用带区间(EXP-T03 §7)。
-- 第四层(EXP-T05):CUDA Graph 把 launch 塌缩 **11.8×**(36.8→3.1µs
+- 第四层(EXP-T05):CUDA Graph 把 launch 塌缩 **11.6×**(36.8→3.1µs
   /调用),graph 后 Triton 反超 torch eager——"Triton 小核慢"的正解是
   上 Graph,不是换 CUDA。
 

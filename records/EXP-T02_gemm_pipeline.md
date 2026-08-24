@@ -46,3 +46,6 @@ qwen8b 为 4),不宣称唯一最优深度。
 ## 8. 下游影响
 llm-engine#EXP-D16 以 src/gemm_pipelined.linear 接入;阶段二 FP8 GEMM
 的 mma 路线预习点已写入 theory/02 Q&A(Hopper TMA/wgmma 界线)。
+
+- **backlog 闭环(2026-08-24 晚)**:≥3 轮 stability 已补——square4k stages3 159.4±1.2 vs cublas 160.0±0.7(打平复现);qwen8b s4 反超复现。
+  raw = data/raw/EXP-T02/*_stability_r{1,2,3}.json,聚合 = data/derived/exp-t02_stability_3rounds.csv。
