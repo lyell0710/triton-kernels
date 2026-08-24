@@ -36,7 +36,8 @@ kperf 无计数器观测(theory/04)。TP=2 引擎侧见 llm-engine#EXP-D22。
 | 红线 | 当前 | 说明 |
 |---|---|---|
 | "打平/反超 cuBLAS" | ✅ 可用 | 限两测形状 fp16(square4k 打平 0.4% 内、8B up_proj 反超 4.8%);未全形状扫描;只引存盘 raw 轮(T02 §7 勘误) |
-| "87% of SDPA-flash" | ✅ 可用 | 4K 严格 87.45%;对照=SDPA flash 后端;须带"简化版/仅 forward" |
+| FP8 "1.5×" | 限定 | **预量化孤立 GEMM vs fp16 cuBLAS**,非端到端推理提速;在线量化端到端另列(72.8TF) |
+| "87% of SDPA-flash" | ✅ 可用 | 完整限定:**简化版、仅 forward、4K 形状(B1·H32/8·D128)、对照=SDPA flash 后端**;缺一不引 |
 | "Triton 比 CUDA 慢/快" | 🚫 禁裸说 | 必须区分 设备侧(同速)/launch(慢 25µs)/端到端(看融合),T03 三口径 |
 | int8 三数字 | 限定 | 5.9µs(裸,scale 预置)/65µs(ext)/52µs(triton 融合)口径不得混引 |
 
