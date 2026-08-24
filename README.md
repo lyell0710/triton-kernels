@@ -21,6 +21,15 @@ CUDA 侧四 kernel 见 Kernel_Optimazation(4090 重测 = 其 EXP-K01)。
 | [EXP-T03](records/EXP-T03_ports_and_binding.md) | ports_and_binding | 2026-08-23 | 完成 | launch 三层反转(EXP-T02 json + EXP-T03/) |
 | [EXP-T04](records/EXP-T04_flash_decoding.md) | flash_decoding | 2026-08-24 | 完成 | 32K 上下文 vs naive **2.39×**,GQA 原生;引擎 probe PASS |
 | [EXP-T05](records/EXP-T05_cudagraph.md) | cudagraph | 2026-08-24 | 完成 | launch 塌缩 **11.8×**(36.8→3.1µs/调用,data/raw/EXP-T05/) |
+| [EXP-T06](records/EXP-T06_fp8_gemm.md) | fp8_gemm | 2026-08-24 | 完成 | per-block FP8 **227.7/235.7 TFLOPS = 1.5× fp16 cuBLAS**(data/raw/EXP-T06/) |
+| [EXP-T07](records/EXP-T07_moe_permute.md) | moe_permute | 2026-08-24 | 完成 | unpermute **12.5×** vs torch,gather 式无原子(data/raw/EXP-T07/) |
+
+## 阶段二增量(8/24)
+
+FP8 per-block GEMM(theory/06:Ada mma vs Hopper wgmma/TMA 界线)、
+MoE permute/unpermute(theory/07:对照 DeepEP dispatch-combine)、
+flash-decoding(theory/05)、CUDA Graph(theory/03 第四层)、
+kperf 无计数器观测(theory/04)。TP=2 引擎侧见 llm-engine#EXP-D22。
 
 ## 措辞红线表
 

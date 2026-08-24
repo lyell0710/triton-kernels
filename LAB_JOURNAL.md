@@ -29,3 +29,18 @@
   本仓自检归零)——批量脚本首行显式 cd,教训第 N 次。
 - **产物**:fa2_fwd/gemm_pipelined 的 fp32 路径;llm-engine#EXP-D15/D16
   由本仓依赖支撑。
+
+## §3 阶段二冲刺:FP8 GEMM + MoE permute + kperf(2026-08-24)
+
+- **做了什么**:①kperf(NCU 平替四件套:计时/roofline/occupancy/对照归因,
+  三 kernel 观测卡);②FP8 per-block GEMM(e4m3,BLOCK_K=缩放组硬对齐,
+  反量化融合累加);③MoE permute/unpermute(gather 式无原子);
+  ④flash-decoding 与 CUDA Graph(见 §2 与 T04/T05)。
+- **关键数字**:FP8 **227.7/235.7 TFLOPS = 1.5× fp16 cuBLAS**(kernel 精确性
+  1.9e-4);MoE unpermute **12.5×**;kperf 揭示 GEMM occ 17% 却 98% 峰值
+  (occupancy 不是目的);索引构建 0.27ms > 搬运之和(moe_align 专用
+  kernel 的存在理由)。
+- **产物**:src/{fp8_gemm,moe_permute,flash_decode}.py、kperf.py、
+  records T04~T07、theory 04~07、raw 四组。
+- **下一步**:阶段二清单四项全闭环(TP=2 在 llm-engine#EXP-D22);
+  阶段三仅剩"读 DeepEP"(纯阅读)与真实 PR(用户动作)。
