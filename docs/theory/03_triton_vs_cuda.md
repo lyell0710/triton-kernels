@@ -5,6 +5,10 @@ status: 完成(实证=EXP-T03)
 
 # 03 · Triton vs CUDA:差距不在 kernel,在 launch 与融合
 
+> 8/24 增补第四层:**CUDA Graph 把 launch 归零**——同一 1024² softmax,
+> eager 36.8µs/调用 → graph 重放 **3.1µs(11.8×)**,反超 torch eager;
+> "Triton 小核慢"的正解是上 Graph,不是换 CUDA(EXP-T05)。
+
 ## 1. 一句话结论
 
 同一行核(softmax/quantize)在**带宽主导尺寸下 Triton 与 torch/CUDA 同速**
