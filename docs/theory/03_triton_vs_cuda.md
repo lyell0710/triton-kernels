@@ -29,7 +29,8 @@ status: 完成(实证=EXP-T03)
    (参数处理/JIT 缓存查找/grid 计算)+ wrapper 里的 empty 分配。
 
 **结论怎么用**(选型准则):
-- 大 kernel / 长序列 / 融合机会多 → Triton 白给(FA2 88% 效率,GEMM 追平);
+- 大 kernel / 长序列 / 融合机会多 → Triton 白给(FA2 87% 效率
+  (EXP-T01),GEMM 打平(EXP-T02));
 - 微 kernel 高频调用 → 裸 CUDA/C++ 扩展,或 CUDA Graph 把 launch 摊平
   (vLLM 正是用 CUDA Graph 吃掉 decode 的 launch 海——与
   vllm/experiments#EXP-014 的 graph-trace 陷阱同根);

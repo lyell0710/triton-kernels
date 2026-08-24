@@ -1,0 +1,6 @@
+# manifest — data/raw/EXP-T05/(2026-08-24 审计补录)
+# 勘注:本目录数据文件名缺 UTC 前缀(建仓初期产物,grandfather 保留原名);
+# 按铁律 3/4 不重命名、不改内容,溯源以文件内 provenance + 本 manifest 为准。
+file: cudagraph_bench.json
+sha256: 3a994cf57da64a7906e7f0c08916e28e2917ebe729b2a31ad52e88f8f7df0ebe
+provenance: provenance: env=v0.25.1-venv sha=9781cddc9f cmd="test_cudagraph.py N=100" date=2026-08-24T02:03:24Z gpu="NVIDIA GeForce RTX 4090" driver=610.57.04

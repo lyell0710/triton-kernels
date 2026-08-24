@@ -38,6 +38,9 @@ occupancy(编译产物资源占用+公式)**;唯独 stall 细分没有直接平�
 | FA2 S=4K | 7% | **74%** | 17%(regs 213) | compute-bound;与 SDPA 差的 13% 在 tile/布局层 |
 | GEMM 4096³ | 12% | **98%** | 17%(regs 170) | 到顶;occ 低是设计而非缺陷 |
 
+三卡数字为**终端级证据**(kperf.py 单轮终端输出,未存 raw),
+登记锚点=EXP-T06 §7;引用时以该登记为准。
+
 ## 4. 面试追问 Q&A
 
 - **Q: 没有 NCU 你怎么定位瓶颈?** 先 kperf 卡片分 memory/compute-bound;

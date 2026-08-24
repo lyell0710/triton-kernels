@@ -1,3 +1,5 @@
+> superseded by docs/theory/02_double_buffering.md @ 2026-08-24(全文数字以存盘 raw data/raw/EXP-T02/ew_gemm_bench.json 改写;本版引用的是首轮未存盘数字,EXP-T02 §7 勘误)
+
 ---
 topic: 双缓冲 / 软件流水(GEMM)
 status: 完成(实证=EXP-T02)
@@ -5,18 +7,12 @@ status: 完成(实证=EXP-T02)
 
 # 02 · 双缓冲:一件事的 CUDA 写法与 Triton 写法
 
-> 8/24 勘误:全文数字以存盘 raw(data/raw/EXP-T02/ew_gemm_bench.json)
-> 改写,首轮未存盘数字(162.1@s4 等)作废(EXP-T02 §7);
-> 旧版见 docs/archive/02_double_buffering_20260823.md。
-
 ## 1. 一句话结论
 
 GEMM 主循环里"载入下一块"和"计算当前块"天然可重叠;CUDA 里手写两块
 shared memory + cp.async 交替(双缓冲),Triton 里写 `num_stages=N` 让
-编译器生成 N 级软件流水。本仓实测(4090, fp16 4096³,单轮,EXP-T02):
-**1 级(无重叠)131.9 TFLOPS → 最优 stages=3 160.5 TFLOPS(+22%),
-与 cuBLAS(159.8)打平(差 0.4% 内)**;8B up_proj 形状 154.4
-(stages=4)**反超 cuBLAS(147.3)4.8%**。
+编译器生成 N 级软件流水。本仓实测(4090, fp16 4096³):**1 级(无重叠)
+133 TFLOPS → 4 级 162 TFLOPS(+21%),追平 cuBLAS(160)**。
 
 ## 2. 机制(一步一步)
 
@@ -41,29 +37,25 @@ for k:
 时编译器自动:①分配 N 份 tile 的 shared memory;②把 load 提前 N-1 轮
 发射(cp.async);③插 wait 屏障。**你写数据流,它排流水**。
 
-**实测的细腻处(比"双缓冲有用"更值钱)**:stages 1→2 只 +1%
-(131.9→133.5),**2→3 才跳 +20%(133.5→160.5)**。为什么:Ada 上
-global→shared 延迟 ≳ 一轮 tl.dot 的时长,2 级只藏了发射、藏不满整段
-延迟;3 级起气泡才填平——最优深度在 3/4 间随形状摇摆(square4k 为 3、
-qwen8b 为 4,EXP-T02 §6),不宣称唯一最优深度。"双缓冲"是流水思想的
-最小版,不是终点——深度要按 延迟/计算比 配。代价同样可测:stage 数 ∝
-shared memory 占用(FA2 的 BN=128 配置就是这么 OOM 的,EXP-T01)。
+**实测的细腻处(比"双缓冲有用"更值钱)**:stages 1→2 只 +1%(133→135),
+**2→3 才跳 +19%(135→161)**。为什么:Ada 上 global→shared 延迟 ≳ 一轮
+tl.dot 的时长,2 级只藏了发射、藏不满整段延迟;3-4 级才把气泡填平。
+"双缓冲"是流水思想的最小版,不是终点——深度要按 延迟/计算比 配。
+代价同样可测:stage 数 ∝ shared memory 占用(FA2 的 BN=128 配置就是
+这么 OOM 的,EXP-T01)。
 
 **另一半性能:grouped launch**(kernel 第 24-33 行):把 CTA 按 GROUP_M
 分组蛇形排,同组共享 B 块 → L2 命中率↑。与流水线正交,一起构成
-"Triton GEMM 打平 cuBLAS(限两测形状 fp16)"的两条腿。
+"Triton GEMM 追平 cuBLAS"的两条腿。
 
-## 3. 本项目实证(EXP-T02,4090,fp16→fp32 累加;单轮存盘值)
+## 3. 本项目实证(EXP-T02,4090,fp16→fp32 累加)
 
 | 形状 | stages=1 | 2 | 3 | 4 | cuBLAS |
 |---|---|---|---|---|---|
-| 4096³ | 131.9 | 133.5 | **160.5** | 157.1 | 159.8 TFLOPS |
-| 2048×4096×12288(Qwen3-8B up_proj) | 127.6 | 129.4 | 151.0 | **154.4** | 147.3 |
+| 4096³ | 133.4 | 134.8 | 160.7 | **162.1** | 160.5 TFLOPS |
+| 2048×4096×12288(Qwen3-8B up_proj) | 127.3 | 128.1 | 153.2 | **157.1** | 155.7 |
 
-square4k 最优 stages=3,与 cuBLAS 打平(差 0.4% 内);qwen8b 最优
-stages=4,反超 4.8%。数据:data/raw/EXP-T02/ew_gemm_bench.json
-(与 EXP-T02 §5-6 一致;cuBLAS=torch.matmul dispatch,cuBLASLt)。
-正确性:相对误差 ~7e-4(fp16 输入 fp32 累加 vs torch.matmul)。
+正确性:相对误差 ≤1e-3 量级(fp16 输入 fp32 累加 vs torch.matmul)。
 
 ## 4. 面试追问 Q&A
 

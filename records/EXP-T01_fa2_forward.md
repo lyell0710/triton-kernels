@@ -37,5 +37,7 @@ BN=128 撞 shared memory 上限(160KB)OOM。
 backlog);tile 扫描未存 raw(终端级);raw provenance sha=pre-commit
 (建仓首 commit 前跑批,代码=首 commit 274acb2 版)。
 
+- backlog(2026-08-24 审计):本记录/README 引用的关键数字为**单轮** bench,待 GPU 空闲补 ≥3 轮 stability(mean/std 落 stability 文件)。
+
 ## 8. 下游影响
 llm-engine#EXP-D15 接入(attention_impl 指针处);简历句候选见 README。

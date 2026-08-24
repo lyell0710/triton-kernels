@@ -41,6 +41,8 @@ kernel 级 bench 未存逐轮 raw(json 存均值);未做 padding 对齐 grouped
 GEMM 的 block 边界(接真实 fused_moe 时需要);跨卡版(all-to-all)不做
 ——阶段三读 DeepEP 的切入问题已在 theory/07 列出。
 
+- backlog(2026-08-24 审计):本记录/README 引用的关键数字为**单轮** bench,待 GPU 空闲补 ≥3 轮 stability(mean/std 落 stability 文件)。
+
 ## 8. 下游影响
 阶段二 MoE Permute 项闭环;与 EXP-014(fused_moe 56.4%)拼成完整
 "MoE 层内时间去哪了"图景。

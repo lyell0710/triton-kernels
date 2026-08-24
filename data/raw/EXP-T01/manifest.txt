@@ -1,0 +1,6 @@
+# manifest — data/raw/EXP-T01/(2026-08-24 审计补录)
+# 勘注:本目录数据文件名缺 UTC 前缀(建仓初期产物,grandfather 保留原名);
+# 按铁律 3/4 不重命名、不改内容,溯源以文件内 provenance + 本 manifest 为准。
+file: fa2_bench.json
+sha256: 936fe75a4a9592daece6b12a985b526b3539e891c1844387db72f07973dce55e
+provenance: provenance: env=v0.25.1-venv(triton3.6,torch2.11) sha=pre-commit cmd="test_fa2.py (BM128/BN64/w8/s2)" date=2026-08-23T23:03:48+00:00 gpu="NVIDIA GeForce RTX 4090" driver=610.57.04

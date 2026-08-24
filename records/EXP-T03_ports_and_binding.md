@@ -41,5 +41,7 @@ CUDA Graph 消 launch 的实测未做(backlog);int8 对照物三口径
 41.6~52µs 波动(launch 开销对系统状态敏感),引用带区间;
 raw provenance sha=pre-commit(同 T01 §7 说明)。
 
+- backlog(2026-08-24 审计):本记录/README 引用的关键数字为**单轮** bench,待 GPU 空闲补 ≥3 轮 stability(mean/std 落 stability 文件)。
+
 ## 8. 下游影响
 简历"Triton vs CUDA"问答有自家三层数据;绑定工装可复用到 FA kernel。

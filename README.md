@@ -5,6 +5,8 @@ CUDA 侧四 kernel 见 Kernel_Optimazation(4090 重测 = 其 EXP-K01)。
 
 ## 主结果(RTX 4090,全部 raw 可复算)
 
+> **单轮限定(2026-08-24 审计)**:本表与 EXP 索引的关键数字均为**单轮** bench 存盘值,未做 ≥3 轮 stability;待 GPU 空闲补测(各 record §7 backlog)。
+
 | 项 | 数字 | 出处 |
 |---|---|---|
 | **FA2 forward(80 行简化版)** | SDPA-flash 的 **87%**(4K:1.119 vs 0.979ms,123 TFLOPS);6 形状正确性全过(GQA/非整除) | EXP-T01 |
@@ -35,11 +37,12 @@ kperf 无计数器观测(theory/04)。TP=2 引擎侧见 llm-engine#EXP-D22。
 
 | 红线 | 当前 | 说明 |
 |---|---|---|
-| "打平/反超 cuBLAS" | ✅ 可用 | 限两测形状 fp16(square4k 打平 0.4% 内、8B up_proj 反超 4.8%);未全形状扫描;只引存盘 raw 轮(T02 §7 勘误) |
+| "打平/反超 cuBLAS" | ✅ 可用 | 限两测形状 fp16(square4k 打平 0.4% 内、8B up_proj 反超 4.8%);未全形状扫描;只引存盘 raw 轮(T02 §7 勘误);cuBLAS=torch.matmul dispatch(cuBLASLt) |
 | FP8 "1.5×" | 限定 | **预量化孤立 GEMM vs fp16 cuBLAS**,非端到端推理提速;在线量化端到端另列(72.8TF) |
 | "87% of SDPA-flash" | ✅ 可用 | 完整限定:**简化版、仅 forward、4K 形状(B1·H32/8·D128)、对照=SDPA flash 后端**;缺一不引 |
 | "Triton 比 CUDA 慢/快" | 🚫 禁裸说 | 必须区分 设备侧(同速)/launch(慢 25µs)/端到端(看融合),T03 三口径 |
 | int8 三数字 | 限定 | 5.9µs(裸,scale 预置)/65µs(ext)/52µs(triton 融合)口径不得混引 |
+| 关键数字 stability | 限定 | 全部为单轮 bench 值;≥3 轮 mean/std 待 GPU 空闲补测(records §7 backlog @2026-08-24) |
 
 ## 远程
 
@@ -47,6 +50,7 @@ kperf 无计数器观测(theory/04)。TP=2 引擎侧见 llm-engine#EXP-D22。
 
 ## 结构
 
-src/{fa2_fwd,gemm_pipelined,elementwise_kernels}.py + torch_ext/;
-scripts/{test_fa2,test_ew_gemm}.py;docs/theory/01-03(五节全实证);
-records/T01-03;data/raw/。
+src/{fa2_fwd,gemm_pipelined,elementwise_kernels,flash_decode,fp8_gemm,moe_permute}.py + torch_ext/;
+scripts/{test_fa2,test_ew_gemm,test_cudagraph,test_fp8_gemm,test_moe_permute,kperf}.py;
+docs/theory/01-07(五节制)+ docs/talk/(面试讲稿)+ docs/archive/;
+records/T01-07;data/raw/EXP-T01~T07(各目录 manifest.txt 补录 sha256+provenance)。

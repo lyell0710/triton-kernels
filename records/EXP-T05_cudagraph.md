@@ -35,6 +35,8 @@ Graph,不是换 CUDA**(graph 后 triton kernel 本体反而最快)。
 cudagraph_capture_sizes 即此);llm-engine 整 step 捕获未做(KV cache
 动态增长需静态化改造,backlog)。
 
+- backlog(2026-08-24 审计):本记录/README 引用的关键数字为**单轮** bench,待 GPU 空闲补 ≥3 轮 stability(mean/std 落 stability 文件)。
+
 ## 8. 下游影响
 launch 三层结论(T03)补全为四层:设备同速 → 分发差 → 融合反转 →
 **graph 归零**;theory/03 增补。

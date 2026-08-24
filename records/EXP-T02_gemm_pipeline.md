@@ -41,6 +41,8 @@ qwen8b 为 4),不宣称唯一最优深度。
 - 未扫 BM/BN/BK 全空间;int8/fp8 变体留阶段二;NCU stall 佐证因容器
   计数器无权限缺席(与 K01 同限制)。
 
+- backlog(2026-08-24 审计):本记录/README 引用的关键数字为**单轮** bench,待 GPU 空闲补 ≥3 轮 stability(mean/std 落 stability 文件)。
+
 ## 8. 下游影响
 llm-engine#EXP-D16 以 src/gemm_pipelined.linear 接入;阶段二 FP8 GEMM
 的 mma 路线预习点已写入 theory/02 Q&A(Hopper TMA/wgmma 界线)。

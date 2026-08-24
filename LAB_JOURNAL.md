@@ -44,3 +44,27 @@
   records T04~T07、theory 04~07、raw 四组。
 - **下一步**:阶段二清单四项全闭环(TP=2 在 llm-engine#EXP-D22);
   阶段三仅剩"读 DeepEP"(纯阅读)与真实 PR(用户动作)。
+
+## §4 2026-08-24 · 审计收尾批次
+
+- **做了什么**:逐条闭环外部审计 findings——①theory/02 全文数字以存盘
+  raw 改写(旧版移 docs/archive/ 标 superseded);②theory/01/03 的
+  88%→87%、慢 12%→13%(4K 严格值 87.45%);③6 组 raw 目录补
+  manifest.txt(sha256+provenance 勘注,不动文件本体不重命名);
+  ④kperf 三卡登记为终端级证据(EXP-T06 §7,theory/04 §3 指去);
+  ⑤docs/talk/ 首版讲稿(逐句过红线表);⑥README 数字加"单轮"限定+
+  T01~T07 §7 补 stability backlog;⑦theory/05-07 补第 5 节"延伸"、
+  Q&A 节名统一;⑧README 结构节更新、红线表补 cuBLAS 口径句。
+- **为什么**:审计确认 theory 层数字与存盘 raw 漂移(首轮未存盘数字
+  残留),关键数字缺 ≥3 轮 stability;GPU 被另一实验占用禁复测,按
+  铁律 6 走"措辞降级 + backlog 登记",数字修订一律以仓内 raw 为准。
+- **关键数字**:theory/02 现行=131.9/133.5/**160.5**/157.1 vs cuBLAS
+  159.8(最优 stages=3,打平差 0.4% 内);qwen8b 154.4@s4 反超 147.3
+  4.8%;FA2 4K=**87%**(87.45% 不进位)、慢 13%。全部指
+  data/raw/EXP-T01,T02 存盘值。
+- **产物路径**:docs/theory/01-07、docs/archive/02_double_buffering_20260823.md、
+  docs/talk/triton_kernels_talk.md、data/raw/EXP-T0{1,2,3,5,6,7}/manifest.txt、
+  records/EXP-T01~T07 §7、README.md、LAB_JOURNAL.md 本节。
+- **下一步**:GPU 空闲后按各 record §7 backlog 补 ≥3 轮 stability
+  (mean/std 落 stability 文件),解锁 README"单轮"限定;本仓仍无远端,
+  待用户建 GitHub repo 后 push(README「远程」节)。

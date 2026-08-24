@@ -36,9 +36,17 @@ scale)搬到 sm_89 的 mma 路线:fp8 e4m3 tl.dot + BLOCK_K=128 与缩放组
 在线量化端到端 72.8 TF——量化 kernel(torch 实现)是瓶颈;真实 serving
 中权重预量化、激活量化融合进上游算子(如 RMSNorm epilogue),此列仅示成本。
 
-## 4. Q&A
+## 4. 面试追问 Q&A
 - **Q: fp8 理论 2× 只吃到 1.5×,差哪?** 缩放乘法+fp32 累加占了算力、
   fp8 mma 峰值本身打折(与 fp16 同引擎不同吞吐配比);NCU 不可用,
   以 kperf 卡片定界(compute-bound,~70% fp8 峰值)。
 - **Q: e4m3 vs e5m2 怎么选?** 前向权重/激活用 e4m3(要精度);
   梯度用 e5m2(要范围)。本实现推理侧,全 e4m3。
+
+## 5. 延伸(锚点)
+
+DeepGEMM README 与 fp8 GEMM 核心实现(128×128 块 scale 设计、
+wgmma/TMA 依赖——Hopper-only 的出处);PTX ISA mma 章 fp8 段
+(sm_89 e4m3 吞吐配比);vllm/experiments#EXP-016(oracle/fp8.py 的
+capability 分派:90/100 快路径跳过 89);本仓 `src/fp8_gemm.py` 与
+`scripts/test_fp8_gemm.py`。

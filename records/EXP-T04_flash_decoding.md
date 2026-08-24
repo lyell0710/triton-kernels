@@ -46,6 +46,8 @@ decode-naive 持平——512 上下文时 attention 占 decode 时间 <10%,持�
 kernel 级 bench 未存 raw(终端级);splits 启发式未扫参;引擎长上下文
 (8K/32K prompt)bench 未跑(d14 PROMPT_LEN 固定 512,参数化留待)。
 
+- backlog(2026-08-24 审计):本记录/README 引用的关键数字为**单轮** bench,待 GPU 空闲补 ≥3 轮 stability(mean/std 落 stability 文件)。
+
 ## 8. 下游影响
 llm-engine decode 路径升级(LLME_ATTN=fa2 现覆盖 prefill+decode);
 theory/05;vLLM flash-decoding/paged attention 的面试衔接点。

@@ -36,3 +36,11 @@ KV cache,曾把收益变负——kernel 快 ≠ 引擎快,拷贝藏在调用约�
 - **Q: 短上下文为什么不赢?** 两次 kernel launch 的固定成本(本机 ~90µs)
   > 计算差;正解是 CUDA Graph(EXP-T05:launch 塌缩 11.8×)或 persistent
   kernel。
+
+## 5. 延伸(锚点)
+
+Flash-Decoding 官方博客(Dao 等,2023,PyTorch blog);FA2 论文
+(2307.08691)§3(split 归并与 online softmax 同一代数);vLLM decode
+attention kernel(paged 读 + split 归并的合体;paged 衔接见
+vllm/experiments 白板图);本仓 `src/flash_decode.py`(partial/combine
+两 kernel)与 llm-engine 接线(llm-engine#EXP-D11/D14)。

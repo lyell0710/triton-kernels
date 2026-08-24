@@ -35,9 +35,17 @@ gather;跨卡 EP 时同一代数变成 all-to-all——DeepEP 的 dispatch/combi
 | 索引构建(torch argsort) | 0.266 ms | — | 待专用化 |
 往返一致性 7.6e-3(bf16 加权和噪声级);专家分段单调性断言通过。
 
-## 4. Q&A
+## 4. 面试追问 Q&A
 - **Q: 为什么 unpermute 差距那么大?** torch 路径 = 反索引构建 + 高级
   索引 gather + 广播乘 + sum 四趟 kernel/中间量;Triton 单 kernel 一趟
   读一趟写——又是融合>单核(theory/03 第三层)的实例。
 - **Q: 索引构建怎么专用化?** 直方图+前缀和+桶内序三个小 kernel
   (即 moe_align 的结构);收益上限 = 0.27ms → ~0.03ms,backlog。
+
+## 5. 延伸(锚点)
+
+DeepEP README(dispatch/combine、SM 收发分工与 hook 式通信-计算重叠
+——阶段三阅读的切入问题见 §2);vLLM 的 moe_align_block_size 专用
+kernel(vllm csrc/moe/);vllm/experiments#EXP-014(fused_moe 56.4%)
+与 #EXP-017(求和顺序数值教训);本仓 `src/moe_permute.py` 与
+`scripts/test_moe_permute.py`。

@@ -1,0 +1,6 @@
+# manifest — data/raw/EXP-T07/(2026-08-24 审计补录)
+# 勘注:本目录数据文件名缺 UTC 前缀(建仓初期产物,grandfather 保留原名);
+# 按铁律 3/4 不重命名、不改内容,溯源以文件内 provenance + 本 manifest 为准。
+file: moe_permute_bench.json
+sha256: 149ca715dcb489f0e8c51f03e374c6525f4ac2af0ae55e7a62178f98f5af50e0
+provenance: provenance: env=v0.25.1-venv sha=7d682abdd0 cmd="test_moe_permute.py T4096 D2048 E60 topk4" date=2026-08-24T02:16:01Z gpu="NVIDIA GeForce RTX 4090" driver=610.57.04

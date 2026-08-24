@@ -1,0 +1,6 @@
+# manifest — data/raw/EXP-T03/(2026-08-24 审计补录)
+# 勘注:本目录数据文件名缺 UTC 前缀(建仓初期产物,grandfather 保留原名);
+# 按铁律 3/4 不重命名、不改内容,溯源以文件内 provenance + 本 manifest 为准。
+file: binding_bench.txt
+sha256: 8fae202938c28a860798b91d5d8de2120522a7bc48e4d88eb3246f9e8a1e9b30
+provenance: provenance: env=v0.25.1-venv sha=pre-commit cmd="torch_ext int8 binding bench (1024x1024 fp32, 300 iters)" date=2026-08-23T23:12:33+00:00 gpu="NVIDIA GeForce RTX 4090" driver=610.57.04

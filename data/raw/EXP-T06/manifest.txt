@@ -1,0 +1,6 @@
+# manifest — data/raw/EXP-T06/(2026-08-24 审计补录)
+# 勘注:本目录数据文件名缺 UTC 前缀(建仓初期产物,grandfather 保留原名);
+# 按铁律 3/4 不重命名、不改内容,溯源以文件内 provenance + 本 manifest 为准。
+file: fp8_gemm_bench.json
+sha256: 7a0046896370e7227566cf2079d5e244b986ab681ccb768eafd282db23e16475
+provenance: provenance: env=v0.25.1-venv sha=7d682abdd0 cmd="test_fp8_gemm.py" date=2026-08-24T02:14:13Z gpu="NVIDIA GeForce RTX 4090" driver=610.57.04

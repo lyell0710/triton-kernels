@@ -40,6 +40,9 @@ Ada/Hopper 界线(mma+cp.async vs wgmma+TMA)= theory/06 表格,
 tile 未扫全空间;激活量化融合(RMSNorm epilogue)未做;e5m2 路线未测;
 BLOCK_N 硬绑 128(权重块对齐)——解耦需 sb 向量化,backlog。
 
+- backlog(2026-08-24 审计):本记录/README 引用的关键数字为**单轮** bench,待 GPU 空闲补 ≥3 轮 stability(mean/std 落 stability 文件)。
+- kperf 三卡观测数字(softmax 8192²:带宽 91%/occ 67% regs 限;FA2 S=4K:算力 74%/occ 17%,regs 213;GEMM 4096³:算力 98%/occ 17%,regs 170)为**终端级证据**(kperf.py 终端输出,未存 raw);theory/04 §3 引用以本条为锚。
+
 ## 8. 下游影响
 阶段二清单 FP8 GEMM 项闭环;面试句:"同一缩放代数在 Ada 用 mma 落地
 1.5×,并能讲清 DeepGEMM 为什么 Hopper-only"。
