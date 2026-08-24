@@ -23,7 +23,7 @@ data/raw/EXP-T01/fa2_bench.json(provenance 首字段);tile 扫描为终端级证
 
 ## 5. 结果
 正确性 6/6(err ≤2e-3,含 GQA 4:1 与 S=777 非整除)。
-S=512/1K/2K/4K:0.038/0.122/0.330/1.119 ms = SDPA-flash 的 88/75/86/88%;
+S=512/1K/2K/4K:0.038/0.122/0.330/1.119 ms = SDPA-flash 的 88/75/86/**87**%(4K 严格值 87.45%,不进位);
 vs naive fp32 快 8~20×。优配 BM128/BN64/w8/s2(4K 上比 BM64 +17%);
 BN=128 撞 shared memory 上限(160KB)OOM。
 
@@ -34,7 +34,8 @@ BN=128 撞 shared memory 上限(160KB)OOM。
 
 ## 7. 异常、偏差与开放问题
 仅 forward;decode(S_q=1)不适用本 kernel(需 flash-decoding split-K,
-backlog);tile 扫描未存 raw(终端级)。
+backlog);tile 扫描未存 raw(终端级);raw provenance sha=pre-commit
+(建仓首 commit 前跑批,代码=首 commit 274acb2 版)。
 
 ## 8. 下游影响
 llm-engine#EXP-D15 接入(attention_impl 指针处);简历句候选见 README。
