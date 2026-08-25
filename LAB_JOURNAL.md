@@ -77,3 +77,19 @@
   (36.16±0.11/3.11)、fp8 228.1±1.3、moe 12.46×。
 - **产物**:data/raw/EXP-T0{1,2,5,6,7}/*_stability_r*.json + data/derived/*_3rounds.csv。
 - **下一步**:待用户建远端推送(仍无 remote)。
+
+## §6 2026-08-25 · README 门面升级
+
+- **做了什么**:README 重排为门面结构(headline 表→图表区→代码导览→
+  Quickstart→结构→台账→红线表+方法论→相关仓);新增
+  scripts/plot_readme_figures.py 从 data/derived/*_3rounds.csv 生成
+  figures/fig1(FA2 vs SDPA 按 S)/fig2(GEMM stages 扫描)/fig3
+  (launch 四口径对数轴),误差条=3 轮 std,固定配色。
+- **为什么**:对外可读性(30 秒扫读拿到数据/图/代码/方法论);数字全部
+  沿用现行文档与 derived,不新造;台账与红线表按铁律 1/6 原样保留,
+  诚实度文化(provenance/≥3轮/证伪保留/勘误留痕)作为差异化如实写出。
+- **关键数字**:无新增测量;图内数字=stability csv(fig1 87%@4K,
+  fig2 159.4±1.2 vs cublas 160.0±0.7,fig3 36.16±0.11→3.11µs)。
+- **产物路径**:README.md、scripts/plot_readme_figures.py、
+  figures/fig{1,2,3}_*.png、LAB_JOURNAL.md 本节。
+- **下一步**:待用户建远端后 push(仍无 remote)。
