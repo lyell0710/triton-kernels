@@ -6,7 +6,7 @@
 
 ## 1. 这一篇回答什么问题
 
-"Triton 比 CUDA 慢吗"是本仓明令**禁止裸答**的问题(LEDGER 红线表)。原因不是政治
+"Triton 比 CUDA 慢吗"是本仓明令**禁止裸答**的问题(本仓措辞约定)。原因不是政治
 正确,是这句话在本仓的数据里同时有三个互相矛盾的答案。读完你应当能:
 
 - 手推**三点法**:为什么用"极小尺寸 + 目标尺寸 + 带宽主导尺寸"三个点,就能把
@@ -111,7 +111,7 @@ ext 路径 ≈ 4 次便宜分发 + 4 次设备本体(其中三个是极小的规
 压到 1。所以本仓的结论句是:**在 torch 集成层,融合数(launch 数)比单 kernel 的快慢
 更重要。**
 
-**三口径红线**(LEDGER,不得混引):5.9 µs(裸,scale 预置)/ 65.1 µs(ext 端到端)/
+**三口径约定**(不得混引):5.9 µs(裸,scale 预置)/ 65.1 µs(ext 端到端)/
 51.7 µs(Triton 融合)。第三个数跨会话在 **41.6~52 µs** 之间波动(主机侧开销对系统
 状态敏感),引用时带区间;同尺寸的 Triton 融合有 3 轮锚 42.2±0.4 µs
 (int8q_1024x1024,data/derived/exp-t02_stability_3rounds.csv),但**与 ext 头对头的
@@ -391,7 +391,7 @@ figures/fig3_launch_cudagraph.png(脚本 scripts/plot_readme_figures.py:122-149)
 
 ## 6. 误区与边界
 
-1. **"Triton 比 CUDA 慢"**——本仓**禁裸说**(LEDGER 红线)。同一个 kernel 在本仓数据里
+1. **"Triton 比 CUDA 慢"**——本仓**禁裸说**(措辞约定)。同一个 kernel 在本仓数据里
    有三个答案:设备侧同速、单次调用贵 ~25-30 µs、端到端可能反超。说清你测的是 kernel
    还是调用链,是这道题的全部。
 2. **"小尺寸测出的 4.4× 是 kernel 差距"**——三点法证明它是与形状无关的**主机侧常数**
@@ -483,4 +483,4 @@ figures/fig3_launch_cudagraph.png(脚本 scripts/plot_readme_figures.py:122-149)
 4. docs/theory/03_triton_vs_cuda.md §2 —— 排障三步(现象 → 假设一证伪 → 假设二坐实)
    的完整叙述,以及选型准则的原始表述。
 5. records/EXP-T03_ports_and_binding.md §5-§7 与 records/EXP-T05_cudagraph.md §5-§7
-   —— 五行表、三口径红线、单轮限定与 graph 捕获的开放问题。
+   —— 五行表、三口径约定、单轮限定与 graph 捕获的开放问题。
