@@ -59,6 +59,8 @@ data/         raw/EXP-T*(不可变原始数据,含 3 轮复测)+ derived/(聚合
 figures/      全部脚本生成(本 README 三图)
 docs/theory/  01 FlashAttention / 02 双缓冲 / 03 Triton vs CUDA 四口径 / 04 无 NCU 观测
               / 05 flash-decoding / 06 FP8@Ada(mma vs wgmma/TMA 界线)/ 07 MoE dispatch-combine
+docs/lectures/ 深度讲义:01 softmax→FA2→flash-decoding / 02 GEMM 流水线与 FP8
+              / 03 launch·融合·CUDA Graph(八段结构:原理→逐段走读→数据口径→追问)
 docs/talk/    面试讲稿   docs/archive/  被取代文档(superseded 标注)
 ```
 

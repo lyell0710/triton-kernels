@@ -112,3 +112,29 @@
   scripts/plot_readme_figures.py、figures/fig{1,2,3}_*.png、
   docs/talk/triton_kernels_talk.md、LAB_JOURNAL.md 本节。
 - **下一步**:待用户建远端后 push(仍无 remote,见 LEDGER.md)。
+
+## §8 2026-08-25 · docs/lectures 三篇深度讲义
+
+- **做了什么**:新建 docs/lectures/,按兄弟仓(sglang-prefix-lab 讲义 01)的八段结构
+  写三篇:①01_fa2_from_softmax_to_flash(softmax 减 max 的必要性 → 分块可归并代数 →
+  FA1/FA2 循环反转 → GQA 映射 → fa2_fwd 全核走读 → 87% 四要素拆解 → flash-decoding
+  split-K 与二次归并);②02_gemm_pipelining(访存墙与 tile 复用算式 → 2 级双缓冲只
+  +1% 的反推 → num_stages 语义与 smem 预算 → gemm_pipelined 走读 → cuBLAS 打平口径 →
+  FP8 per-block 缩放代数与 Ada/Hopper 界线);③03_launch_fusion_graph(四层因果链 +
+  elementwise/int8_binding/test_cudagraph 走读 + 决策树)。README 代码结构节补
+  docs/lectures 指引两行。
+- **为什么**:theory/ 是机制笔记(五节、点到为止),talk/ 是口播稿;缺一层"能逐段
+  走读源码 + 逐个数字讲口径 + 扛住连环追问"的长文。本批全部数字只引现行口径,
+  T04 一律用 2.24×/5.17× 双口径 + Skv≤8K 反亏 0.86-0.88×,T05 用 11.6×/36.2→3.11µs,
+  87% 带四要素,FP8 1.5× 带"预量化孤立 GEMM",binding 端到端注明单轮。
+- **关键数字**(无新增测量,全部来自 data/derived 与 records):新算的机理账三处——
+  ①flash-decoding 三臂字节账 134.2/272.6/675 MB → 886/803/863 GB/s(对 1008 峰值
+  88%/80%/86%),字节比 2.03/5.03 对上实测 2.24×/5.17×;②GEMM tile 强度
+  BM·BN/(BM+BN)=64 FLOP/Byte vs 机器平衡点 164,tile 模型 HBM 上界 2.13 ms vs 实测
+  0.862 ms → 重读主要命中 L2;③graph 重放 3.11µs 反推 2.7 TB/s > HBM,说明含 L2 常驻
+  红利,已在讲义内标为口径上限(可外推 11.6×,不可外推 3.11µs)。
+- **产物路径**:docs/lectures/01_fa2_from_softmax_to_flash.md(600 行,122 行逐字代码)、
+  docs/lectures/02_gemm_pipelining.md(509 行,103 行)、
+  docs/lectures/03_launch_fusion_graph.md(486 行,97 行)、README.md、LAB_JOURNAL.md 本节。
+- **下一步**:讲义引用的 21 段代码已逐字校验行号;若 src/ 再改注释需同步复核行号。
+  仓内仍无远端,待用户建 GitHub repo 后 push。
