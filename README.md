@@ -11,7 +11,7 @@
 | FA2 forward,80 行简化版 | SDPA-flash 的 **87%**(S=4K:1.118±0.002 vs 0.975±0.002 ms,123 TFLOPS) | 简化版、仅 forward、4K 形状(B1·H32/8·D128)、对照=SDPA flash 后端 | EXP-T01 · `data/derived/exp-t01_stability_3rounds.csv` |
 | 流水线 GEMM 打平 cuBLAS | 4096³ fp16:**160.5 TFLOPS** vs 159.8(stages=3;3 轮复现 159.4±1.2 vs 160.0±0.7);8B up_proj 反超 4.8% | 限两测形状 fp16;cuBLAS=torch.matmul dispatch(cuBLASLt) | EXP-T02 · `data/derived/exp-t02_stability_3rounds.csv` |
 | FP8 per-block GEMM | 228.1±1.3 TFLOPS = **1.5×** fp16 cuBLAS(DeepGEMM 缩放策略在 Ada mma 落地) | 预量化孤立 GEMM,非端到端(在线量化端到端 72.9,量化 kernel 是瓶颈) | EXP-T06 · `data/derived/exp-t06_stability_3rounds.csv` |
-| flash-decoding(split-K) | 32K 上下文 **2.39×** vs naive,GQA 原生不 repeat KV | 单轮;引擎 fp32 probe PASS | EXP-T04 |
+| flash-decoding(split-K) | 32K 上下文 **2.24±0.11×** vs naive(repeat 预置口径;含 repeat 实体化成本 **5.17×**) | 3 轮;Skv<=8K 时 0.86-0.88×(归并开销反亏,长上下文武器);引擎 fp32 probe PASS | EXP-T04 · `data/derived/exp-t04_stability_3rounds.csv` |
 | MoE unpermute | **12.5×** vs torch(1.053±0.002 至 0.0845±0.0001 ms),gather 式无原子 | 单卡 permute/unpermute,T4096/D2048/E60/top4 | EXP-T07 · `data/derived/exp-t07_stability_3rounds.csv` |
 | CUDA Graph 消 launch | 每调用 36.2±0.1 至 3.11 µs,**11.6×** 塌缩,graph 后 Triton 反超 torch | 1024² softmax ×100 调用;地址稳定前提(动态 shape 需分桶) | EXP-T05 · `data/derived/exp-t05_stability_3rounds.csv` |
 
@@ -29,7 +29,7 @@
 
 ## 关键发现
 
-**"Triton 比 CUDA 慢"是个没有意义的裸命题——必须拆三个口径。** 同一行核(softmax)在带宽主导尺寸下 Triton 与 torch 同速(8192²:917 vs 922 GB/s,双双贴 4090 roofline 91%);小尺寸看到的 4× "差距"全部来自主机侧 launch(Triton Python 分发 ~30µs > torch C++ ~8µs > 裸 CUDA ~5µs);而端到端还有第三层反转:Triton 单 kernel 融合(52µs)反超"更快的 CUDA kernel + 3 次前置 launch"(65µs)——融合数比单核快慢更重要。launch 这一层的终局解是 CUDA Graph:重放把每调用 36.2µs 塌缩到 3.11µs,此后 Triton 反超 torch eager(EXP-T03/T05)。
+**"Triton 比 CUDA 慢"是个没有意义的裸命题——必须拆三个口径。** 同一行核(softmax)在带宽主导尺寸下 Triton 与 torch 同速(8192²:917 vs 921 GB/s,双双贴 4090 roofline 91%);小尺寸看到的 4× "差距"全部来自主机侧 launch(Triton Python 分发 ~30µs > torch C++ ~8µs > 裸 CUDA ~5µs);而端到端还有第三层反转:Triton 单 kernel 融合(52µs)反超"更快的 CUDA kernel + 3 次前置 launch"(65µs)——融合数比单核快慢更重要。launch 这一层的终局解是 CUDA Graph:重放把每调用 36.2µs 塌缩到 3.11µs,此后 Triton 反超 torch eager(EXP-T03/T05)。
 
 ```mermaid
 flowchart TD

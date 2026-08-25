@@ -39,3 +39,9 @@
 - 图表全部由 `scripts/plot_readme_figures.py` 从 derived 数据生成;对外图脚注不带日期(源数据文件+硬件+轮数)。
 - docs/talk/ 讲稿逐句过本表红线;引用限定词不得剥离。
 - 阶段三剩余:读 DeepEP(纯阅读)与真实 PR(用户动作)。
+
+## 2026-08-25 增补
+
+- EXP-T04 stability backlog 闭环:3 轮 + 三臂口径拆分(2.24×/5.17×);§5 旧表小 Skv 行作废(混合口径不可复现);README/简历已同步双口径。变体(H32/fp16)入 raw 备查。
+- EXP-T03 残留:设备侧 8192² 同速已被 T02 3 轮覆盖(0.5824/0.5844 ms);**binding 端到端(51.7/65.1µs)仍为单轮**,对外引用须带"单轮"。
+- 注释校验勘正:flash_decode.py §8→§7 指针、elementwise/README 922→921 GB/s(以 record 917/921 为准)。

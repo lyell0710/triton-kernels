@@ -51,3 +51,14 @@ kernel 级 bench 未存 raw(终端级);splits 启发式未扫参;引擎长上下
 ## 8. 下游影响
 llm-engine decode 路径升级(LLME_ATTN=fa2 现覆盖 prefill+decode);
 theory/05;vLLM flash-decoding/paged attention 的面试衔接点。
+
+- **backlog 闭环 + 口径勘正(补测,scripts/test_flash_decode.py,3 轮)**:
+  ①fd 侧完全复现(32K 0.147→0.151±0.005 ms);②对照物口径拆为三臂后,
+  32K 提速 = **2.24±0.11×(naive repeat 预置)/ 5.17±0.24×(含 repeat 实体化,
+  GQA 原生免掉的正是这份拷贝)**;③**§5 原表 Skv≤8192 各行作废**——三轮实测
+  repeat 预置口径下 fd 反而 0.86-0.88×(split-K 归并开销在短上下文不划算),
+  原单轮 1.21-1.28× 系当年未存脚本的混合口径,不可复现;flash-decoding 的
+  正确定位=长上下文武器。④另附 Qwen3-8B 形状变体(H32/fp16):32K 达 9.0×
+  (repeat 内计)。raw=data/raw/EXP-T04/(manifest),聚合=
+  data/derived/exp-t04_stability_3rounds.csv。原"未存 raw/未扫参"缺口就此关闭
+  (splits 启发式扫参仍开放)。

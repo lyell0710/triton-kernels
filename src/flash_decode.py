@@ -139,7 +139,7 @@ def flash_decode(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
     if num_splits is None:
         # 填满 SM 的启发式:4090 有 128 个 SM,目标 B*Hq*splits ≳ 2×128
         # (每 SM 至少 2 个 CTA 才有延迟切换余地);上限 cdiv(Skv, block_n)
-        # 保证段长不小于一个 BLOCK_N(再细切只剩空转)。未扫参(EXP-T04 §8)
+        # 保证段长不小于一个 BLOCK_N(再细切只剩空转)。未扫参(EXP-T04 §7)
         want = max(1, (2 * 128) // max(B * Hq, 1))
         num_splits = min(max(want, 1), triton.cdiv(Skv, block_n))
     # combine 里 NUM_SPLITS 喂 tl.arange,必须 2 的幂;向上取整可能造出

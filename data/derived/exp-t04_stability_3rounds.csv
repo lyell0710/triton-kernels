@@ -1,0 +1,6 @@
+# provenance: derived from <UTC>_flash_decode_stability_r{1,2,3}.json (EXP-T04 原协议 H16/8 bf16 三臂), aggregator inline
+skv,fd_ms_mean,fd_ms_std,naive_prerepeat_ms_mean,speedup_vs_prerepeat_mean,speedup_vs_prerepeat_std,naive_incl_repeat_ms_mean,speedup_vs_incl_mean,speedup_vs_incl_std
+512,0.0907,0.0022,0.0779,0.86,0.02,0.1243,1.37,0.01
+2048,0.0941,0.0024,0.0816,0.87,0.01,0.1271,1.35,0.02
+8192,0.0918,0.0026,0.0804,0.88,0.01,0.1726,1.88,0.05
+32768,0.1515,0.0073,0.3393,2.24,0.11,0.7822,5.17,0.24

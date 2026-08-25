@@ -10,7 +10,7 @@
   (若有)来自这里,见 EXP-T03 的同尺寸对比。
 
 性能特征——必须拆三个口径引用(EXP-T03/T05,4090):
-- 设备侧:softmax 8192² Triton 917 vs torch 922 GB/s,同速,双双贴
+- 设备侧:softmax 8192² Triton 917 vs torch 921 GB/s,同速,双双贴
   roofline 91%(kperf:带宽 91%,occ 67%);
 - launch 层:1024² 的 4.4× "差距"全在主机侧(8×8 纯开销 37.4 vs 8.0µs,
   Triton Python 分发 > torch C++ 分发);终局解是 CUDA Graph:每调用
