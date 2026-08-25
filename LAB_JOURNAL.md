@@ -93,3 +93,22 @@
 - **产物路径**:README.md、scripts/plot_readme_figures.py、
   figures/fig{1,2,3}_*.png、LAB_JOURNAL.md 本节。
 - **下一步**:待用户建远端后 push(仍无 remote)。
+
+## §7 2026-08-25 · README 对外/对内分家
+
+- **做了什么**:①新建 LEDGER.md 为状态与措辞唯一权威,整体收纳原 README
+  的 EXP 台账(日期/状态列)、措辞红线表+诚实度文化段、stability/勘误
+  横幅、远程待办与内部约定;②README 重写为纯对外门面(一句话+动机→
+  核心结果表→图表→关键发现四段机制解释→代码导览→Quickstart→结构→
+  无日期无状态的记录索引→测量方法对外化→相关项目),逐词清除日期/
+  勘误/审计/红线/台账/待办/终端级等对内词(限定口径如"3 轮 mean±std"
+  "单轮"保留——那是测量条件);③plot_readme_figures.py 脚注去日期
+  (保留 源数据+RTX 4090+3轮std),三图重出;④CLAUDE.md 附则:README=
+  对外门面,唯一权威=LEDGER.md;⑤docs/talk 讲稿的红线表引用改指
+  LEDGER.md。
+- **为什么**:README 的读者是第一次打开仓库的陌生面试官,日期/状态/
+  内部流程属对内维护信息,分家后两边各司其职。
+- **产物路径**:LEDGER.md、README.md、CLAUDE.md、
+  scripts/plot_readme_figures.py、figures/fig{1,2,3}_*.png、
+  docs/talk/triton_kernels_talk.md、LAB_JOURNAL.md 本节。
+- **下一步**:待用户建远端后 push(仍无 remote,见 LEDGER.md)。

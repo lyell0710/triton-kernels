@@ -1,17 +1,17 @@
 # triton-kernels — Triton 手写 LLM 算子:FA2 / 流水线 GEMM / FP8 / flash-decoding / MoE / CUDA Graph
 
-从零手写并系统 benchmark 一组 LLM 推理核心算子(RTX 4090),证明两件事:
-**①简化实现能逼近/打平生产级库(SDPA-flash、cuBLAS);②每个数字可追溯到落盘 raw、≥3 轮复测、限定口径如实声明。**
-下游消费方:[llm-engine](https://github.com/lyell0710/llm-engine)(D15/D16/decode 路径以本仓为依赖)。
+**本项目从零手写并系统 benchmark 一组 LLM 推理核心算子(RTX 4090),回答一个问题:简化实现能在多大程度上逼近生产级库(SDPA-flash、cuBLAS),差距又具体来自哪一层。**
+写 kernel 的人很多,能把"快/慢"拆到设备侧、launch、融合三个口径并分别给出数字的不多——本项目把每个差距的来源讲清,并让每个数字可溯源到落盘的原始数据。
+产出算子已被自研推理引擎 [llm-engine](https://github.com/lyell0710/llm-engine) 作为依赖接入(attention/linear/decode 路径)。
 
-## 🎯 Headline 结果(RTX 4090,3 轮 mean±std,除注明)
+## 🎯 核心结果(RTX 4090,3 轮 mean±std,除注明)
 
-| 结果 | 数字 | 限定口径(红线表管辖) | 证据 |
+| 结果 | 数字 | 测量条件 | 证据 |
 |---|---|---|---|
 | **FA2 forward,80 行简化版** | **SDPA-flash 的 87%**(S=4K:1.118±0.002 vs 0.975±0.002 ms,123 TFLOPS) | 简化版、仅 forward、4K 形状(B1·H32/8·D128)、对照=SDPA flash 后端 | EXP-T01 · `data/derived/exp-t01_stability_3rounds.csv` |
 | **流水线 GEMM 打平 cuBLAS** | 4096³ fp16:**160.5 TFLOPS vs 159.8**(stages=3;3 轮复现 159.4±1.2 vs 160.0±0.7);8B up_proj **反超 4.8%** | 限两测形状 fp16;cuBLAS=torch.matmul dispatch(cuBLASLt) | EXP-T02 · `data/derived/exp-t02_stability_3rounds.csv` |
 | **FP8 per-block GEMM** | **228.1±1.3 TFLOPS = 1.5× fp16 cuBLAS**(DeepGEMM 缩放策略在 Ada mma 落地) | 预量化孤立 GEMM,非端到端(在线量化端到端 72.9,量化 kernel 是瓶颈) | EXP-T06 · `data/derived/exp-t06_stability_3rounds.csv` |
-| **flash-decoding(split-K)** | 32K 上下文 **2.39× vs naive**,GQA 原生不 repeat KV | 单轮,kernel 级终端级证据;引擎 fp32 probe PASS | EXP-T04 |
+| **flash-decoding(split-K)** | 32K 上下文 **2.39× vs naive**,GQA 原生不 repeat KV | 单轮;引擎 fp32 probe PASS | EXP-T04 |
 | **MoE unpermute** | **12.5× vs torch**(1.053±0.002 → 0.0845±0.0001 ms),gather 式无原子 | 单卡 permute/unpermute,T4096/D2048/E60/top4 | EXP-T07 · `data/derived/exp-t07_stability_3rounds.csv` |
 | **CUDA Graph 消 launch** | 每调用 **36.2±0.1 → 3.11 µs = 11.6× 塌缩**,graph 后 Triton 反超 torch | 1024² softmax ×100 调用;地址稳定前提(动态 shape 需分桶) | EXP-T05 · `data/derived/exp-t05_stability_3rounds.csv` |
 
@@ -20,17 +20,24 @@
 ![FA2 vs SDPA](figures/fig1_fa2_vs_sdpa.png)
 
 > 简化版 FA2 forward 随序列长逼近 SDPA-flash,S=4K 达 87%(形状 B1·H32/8·D128,fp16)。
-> source: `data/derived/exp-t01_stability_3rounds.csv`(2026-08-24)
 
 ![GEMM stages 扫描](figures/fig2_gemm_stages.png)
 
-> 同一 kernel 只变 num_stages:2 级双缓冲仅 +1%,3 级流水才 +21%,与 cuBLAS(torch.matmul dispatch)打平在误差条内——Ada 上搬运延迟长于一轮 dot,流水深度须按延迟/计算比配。
-> source: `data/derived/exp-t02_stability_3rounds.csv`(2026-08-24)
+> 同一 kernel 只变 num_stages:2 级双缓冲仅 +1%,3 级流水才 +21%,与 cuBLAS(torch.matmul dispatch)打平在误差条内。
 
 ![launch 四口径](figures/fig3_launch_cudagraph.png)
 
 > "Triton 小核慢"的正解是上 CUDA Graph 而不是换 CUDA:graph 重放把每调用 36.2µs 塌缩到 3.11µs,反超 torch eager 与 torch+graph(对数轴)。
-> source: `data/derived/exp-t05_stability_3rounds.csv`(2026-08-24)
+
+## 🧠 关键发现:差距在哪一层
+
+**"Triton 比 CUDA 慢"是个没有意义的裸命题——必须拆三个口径。** 同一行核(softmax)在带宽主导尺寸下 Triton 与 torch 同速(8192²:917 vs 922 GB/s,双双贴 4090 roofline 91%);小尺寸看到的 4× "差距"全部来自主机侧 launch(Triton Python 分发 ~30µs > torch C++ ~8µs > 裸 CUDA ~5µs);而端到端还有第三层反转:Triton 单 kernel 融合(52µs)反超"更快的 CUDA kernel + 3 次前置 launch"(65µs)——融合数比单核快慢更重要。launch 这一层的终局解是 CUDA Graph:重放把每调用 36.2µs 塌缩到 3.11µs,此后 Triton 反超 torch eager(EXP-T03/T05)。
+
+**流水线深度必须按"搬运延迟/计算时长"比值配,双缓冲不是自动奖励。** 同一 GEMM kernel 只变 num_stages:2 级(经典双缓冲)仅 +1%,3 级才 +21% 并打平 cuBLAS——Ada 上一次 BLOCK_K 搬运的延迟长于一轮 tensor core dot,2 级流水藏不住它,必须再加一级(EXP-T02)。另一个反直觉数字:该 GEMM occupancy 只有 17%(寄存器限制)却打出 98% 峰值算力——tensor core kernel 靠寄存器堆 ILP 藏延迟,比高 occupancy 更值钱,"occupancy 低"只在延迟藏不住时才是嫌疑人。
+
+**FP8 的 2× 理论收益在 Ada 上只能吃到 1.5×,缺口是指令世代的架构税。** DeepGEMM 的细粒度缩放代数(权重 128×128 块 scale + 激活 per-token-group scale)可以原样搬到 sm_89,但 Hopper 的 wgmma 有原生 scale 槽、TMA 管搬运,Ada 只有同步 mma + cp.async,缩放乘法只能在累加器侧手乘、fp32 累加占算力,fp8 mma 峰值本身也打折。另一半真相:1.5× 是预量化孤立 GEMM 的数字,在线量化端到端只有 72.9 TFLOPS——量化 kernel 才是瓶颈,这正是真实 serving 里权重预量化、激活量化融合进上游算子的原因(EXP-T06)。
+
+**MoE unpermute 的 12.5× 来自把 scatter-add 翻转成 gather。** 直觉实现是每个专家输出行原子加回原 token 位;改成每个 token 自己去收 topk 行加权求和,则无竞争、求和顺序确定(数值可复现)。测量还给出一个结构性发现:索引构建(argsort,0.27ms)比数据搬运本体更贵——这就是 vLLM 为它写专用 kernel(moe_align_block_size)的存在理由(EXP-T07)。
 
 ## 🔬 代码导览
 
@@ -55,7 +62,7 @@ for start_n in range(0, hi, BLOCK_N):   # K/V 分块流过片上,HBM 读写 O(S�
 acc = acc / l_i[:, None]                # 归一化推迟到循环外,全程无 S×S 物化
 ```
 
-**流水线 GEMM**(`src/gemm_pipelined.py`)——CUDA 手写双缓冲(两块 shared memory + cp.async 交替)在 Triton 里是同一循环体加一个编译器旋钮,本仓把"双缓冲带来多少"变成可测数字(见 fig2):
+**流水线 GEMM**(`src/gemm_pipelined.py`)——CUDA 手写双缓冲(两块 shared memory + cp.async 交替)在 Triton 里是同一循环体加一个编译器旋钮,本项目把"双缓冲带来多少"变成可测数字(见 fig2):
 
 ```python
 acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
@@ -69,7 +76,7 @@ for k0 in range(0, K, BLOCK_K):
 
 其余:`src/fp8_gemm.py`(e4m3 per-block 反量化融合进 fp32 累加)、`src/flash_decode.py`(split-K 两段式 + online 归并)、`src/moe_permute.py`(gather 式 unpermute,无原子、求和顺序确定)。
 
-## 🚀 复现 Quickstart
+## 🚀 快速复现
 
 ```bash
 # 环境:CUDA GPU + torch ≥2.x + triton ≥3.x(实测环境见各 record §2)
@@ -83,7 +90,7 @@ python scripts/test_cudagraph.py     # launch 四口径(eager/graph × triton/to
 python scripts/plot_readme_figures.py
 ```
 
-bench 只追加 UTC 前缀新文件,不覆盖已有 raw;`data/raw/EXP-*/manifest.txt` 记录 sha256+provenance。
+bench 结果只追加新文件、从不覆盖已有原始数据;每组 `data/raw/EXP-*/manifest.txt` 记录 sha256 与 provenance(环境+命令)。
 
 ## 🧭 仓库结构
 
@@ -91,46 +98,36 @@ bench 只追加 UTC 前缀新文件,不覆盖已有 raw;`data/raw/EXP-*/manifest
 src/          fa2_fwd / gemm_pipelined / fp8_gemm / flash_decode / moe_permute
               / elementwise_kernels + torch_ext/(CUDA kernel 绑定)
 scripts/      test_*(正确性 gate + bench)、plot_readme_figures、kperf(无计数器观测)
-records/      EXP-T01~T07 八节实验记录(假设跑前锁定,勘误留痕)
-data/         raw/EXP-T*(不可变,含 3 轮 stability)+ derived/(聚合 mean/std)
+records/      EXP-T01~T07 实验记录(假设先于实验锁定,含排障与修正全过程)
+data/         raw/EXP-T*(不可变原始数据,含 3 轮复测)+ derived/(聚合 mean/std)
 figures/      全部脚本生成(本 README 三图)
 docs/theory/  01 FlashAttention / 02 双缓冲 / 03 Triton vs CUDA 四口径 / 04 无 NCU 观测
               / 05 flash-decoding / 06 FP8@Ada(mma vs wgmma/TMA 界线)/ 07 MoE dispatch-combine
-docs/talk/    面试讲稿(逐句过红线表)   docs/archive/  被取代文档(superseded 标注)
+docs/talk/    面试讲稿   docs/archive/  被取代文档(superseded 标注)
 ```
 
-## 🧪 实验台账(状态唯一权威)
+## 📚 实验记录索引
 
-| 编号 | slug | 日期 | 状态 | 关键数字(指针) |
-|---|---|---|---|---|
-| [EXP-T01](records/EXP-T01_fa2_forward.md) | fa2_forward | 2026-08-23 | 完成 | 87% of SDPA@4K(data/raw/EXP-T01/) |
-| [EXP-T02](records/EXP-T02_gemm_pipeline.md) | gemm_pipeline | 2026-08-23 | 完成 | 160.5 TFLOPS 打平 cuBLAS/8B 形状反超 4.8%(data/raw/EXP-T02/) |
-| [EXP-T03](records/EXP-T03_ports_and_binding.md) | ports_and_binding | 2026-08-23 | 完成 | launch 三层反转(EXP-T02 json + EXP-T03/) |
-| [EXP-T04](records/EXP-T04_flash_decoding.md) | flash_decoding | 2026-08-24 | 完成 | 32K 上下文 vs naive **2.39×**,GQA 原生;引擎 probe PASS |
-| [EXP-T05](records/EXP-T05_cudagraph.md) | cudagraph | 2026-08-24 | 完成 | launch 塌缩 **11.6×**(36.8→3.1µs/调用,data/raw/EXP-T05/) |
-| [EXP-T06](records/EXP-T06_fp8_gemm.md) | fp8_gemm | 2026-08-24 | 完成 | per-block FP8 **227.7/235.7 TFLOPS = 1.5× fp16 cuBLAS**(data/raw/EXP-T06/) |
-| [EXP-T07](records/EXP-T07_moe_permute.md) | moe_permute | 2026-08-24 | 完成 | unpermute **12.5×** vs torch,gather 式无原子(data/raw/EXP-T07/) |
+| 记录 | 一句话结论 |
+|---|---|
+| [EXP-T01](records/EXP-T01_fa2_forward.md) fa2_forward | FA2 forward 从零实现(causal+GQA+非整除),6 形状正确性全过;tile 扫描定优配,S=4K 达 SDPA-flash 87% |
+| [EXP-T02](records/EXP-T02_gemm_pipeline.md) gemm_pipeline | num_stages 1→4 扫描:3 级流水 160.5 TFLOPS 打平 cuBLAS,8B up_proj 形状反超 4.8% |
+| [EXP-T03](records/EXP-T03_ports_and_binding.md) ports_and_binding | "Triton 慢"排障:设备侧同速、开销在 launch、端到端看融合;mask 假设被对照实验证伪(照记) |
+| [EXP-T04](records/EXP-T04_flash_decoding.md) flash_decoding | flash-decoding(split-K)32K 上下文 2.39× vs naive(单轮),GQA 原生不 repeat KV |
+| [EXP-T05](records/EXP-T05_cudagraph.md) cudagraph | CUDA Graph 把每调用 36.2µs 塌缩到 3.11µs(11.6×),graph 后 Triton 反超 torch |
+| [EXP-T06](records/EXP-T06_fp8_gemm.md) fp8_gemm | FP8 per-block GEMM 228 TFLOPS = 1.5× fp16 cuBLAS;在线量化端到端 72.9,瓶颈在量化 kernel |
+| [EXP-T07](records/EXP-T07_moe_permute.md) moe_permute | MoE unpermute gather 式无原子 12.5× vs torch;索引构建成本反而大于搬运本体 |
 
-> **stability(2026-08-24 晚)**:headline 数字已全部 ≥3 轮复测,mean/std 见 `data/derived/exp-t01_stability_3rounds.csv` 等五份(T01/02/05/06/07);T05 launch 塌缩勘误 11.8×→**11.6×**。
-> 阶段二增量(8/24):FP8 per-block GEMM(theory/06)、MoE permute/unpermute(theory/07,对照 DeepEP)、flash-decoding(theory/05)、CUDA Graph(theory/03 第四层)、kperf 无计数器观测(theory/04);TP=2 引擎侧见 llm-engine#EXP-D22。
+## 🧪 测量方法
 
-## 📏 措辞红线表 + 方法论
+- **每个数字可溯源**:进本页的每个数字都能指回一份落盘的原始数据文件;`data/raw/` 不可变,manifest 记录环境、命令与 sha256。
+- **关键结论 ≥3 轮误差条**:核心结果全部 3 轮复测,mean±std 落 `data/derived/`;单轮数字明确标注"单轮"。
+- **设对照与反例臂**:每个加速数字旁边都有对照(SDPA-flash / cuBLAS / torch 参考实现),排障用控制变量的对照实验而不是猜测。
+- **负结果照常报告**:被证伪的假设(如"mask load 阻断向量化")、不利口径(FP8 在线量化端到端只有 72.9 TFLOPS)与结论修正过程都保留在记录里,旧数字废弃后不复用。
+- **限定条件是数字的一部分**:"87%"必须带"简化版、仅 forward、4K 形状、对照=SDPA-flash"四要素,引用时不剥离。
 
-**诚实度文化(本仓的差异化)**:每个进 README 的数字带 provenance(raw 首行/manifest 记录环境+命令+sha)且 ≥3 轮复测落 mean/std;假设在跑之前锁定判定阈值,证伪照登不删(T03 的 mask 假设证伪过程、"≤2×"假设错得有价值,全部保留);勘误留痕——T02 首轮未存盘数字作废、T05 11.8×→11.6× 修正,均在 record §7 与台账可查,旧值废弃后禁止复活。
-
-| 红线 | 当前 | 说明 |
-|---|---|---|
-| "打平/反超 cuBLAS" | ✅ 可用 | 限两测形状 fp16(square4k 打平 0.4% 内、8B up_proj 反超 4.8%);未全形状扫描;只引存盘 raw 轮(T02 §7 勘误);cuBLAS=torch.matmul dispatch(cuBLASLt) |
-| FP8 "1.5×" | 限定 | **预量化孤立 GEMM vs fp16 cuBLAS**,非端到端推理提速;在线量化端到端另列(72.8TF) |
-| "87% of SDPA-flash" | ✅ 可用 | 完整限定:**简化版、仅 forward、4K 形状(B1·H32/8·D128)、对照=SDPA flash 后端**;缺一不引 |
-| "Triton 比 CUDA 慢/快" | 🚫 禁裸说 | 必须区分 设备侧(同速)/launch(慢 25µs)/端到端(看融合),T03 三口径 |
-| int8 三数字 | 限定 | 5.9µs(裸,scale 预置)/65µs(ext)/52µs(triton 融合)口径不得混引 |
-| 关键数字 stability | ✅ 已补 | 3 轮 mean/std 落 data/derived/(2026-08-24);headline 全部复现(T05 修正 11.6×) |
-
-## 🔗 相关仓
+## 🔗 相关项目
 
 - [vllmExperience](https://github.com/lyell0710/vllmExperience) — vLLM 源码级实验(CUDA Graph/分派机制等,与本仓 T05/T06 互为表里)
 - [Kernel_Optimazation](https://github.com/lyell0710/Kernel_Optimazation) — CUDA 手写四 kernel(本仓 T03 的 CUDA 侧对照,int8 v4 被零改动绑进本仓)
-- [llm-engine](https://github.com/lyell0710/llm-engine) — 自研推理引擎,本仓 FA2/GEMM/flash-decode 的接入方(D15/D16/D22)
-
-**远程**:本仓当前**仅本地**(无 git remote);推 GitHub 由用户建 repo 后 `git remote add origin ... && git push`。
+- [llm-engine](https://github.com/lyell0710/llm-engine) — 自研推理引擎,本仓 FA2/GEMM/flash-decode 的接入方

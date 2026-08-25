@@ -3,7 +3,7 @@
 
 用法: /root/venvs/kernel-opt/bin/python scripts/plot_readme_figures.py
 产物: figures/fig{1,2,3}_*.png(白底 dpi=240;误差条=3 轮 std)
-规范: 单图单结论(标题即结论句);图脚注写源数据文件+日期;
+规范: 单图单结论(标题即结论句);图脚注写源数据文件+硬件+轮数(不带日期,对外口径);
       配色固定 我方 #1a6fb8 / 次强调 #0f4c81 / 基线 #c0392b / 中性 #999。
 """
 
@@ -32,9 +32,6 @@ C_BASE = "#c0392b"      # 基线/对照
 C_NEUT = "#999999"      # 中性
 INK = "#333333"
 
-DATA_DATE = "2026-08-24"  # stability 3 轮落盘日期(csv 首行 provenance)
-
-
 def load_csv(name):
     """读 derived csv → {metric: (mean, std)}。首行 provenance 以 # 开头被跳过。"""
     out = {}
@@ -54,7 +51,7 @@ def style_ax(ax):
 
 
 def footnote(fig, src):
-    fig.text(0.01, 0.01, f"source: {src} · {DATA_DATE} · RTX 4090 · 误差条=3轮std",
+    fig.text(0.01, 0.01, f"source: {src} · RTX 4090 · 误差条=3轮std",
              fontsize=8, color="#777777")
 
 
