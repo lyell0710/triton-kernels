@@ -126,6 +126,7 @@ bench 结果只追加新文件、从不覆盖已有原始数据;每组 `data/raw
 | [EXP-T05](records/EXP-T05_cudagraph.md) cudagraph | CUDA Graph 把每调用 36.2µs 塌缩到 3.11µs(11.6×),graph 后 Triton 反超 torch |
 | [EXP-T06](records/EXP-T06_fp8_gemm.md) fp8_gemm | FP8 per-block GEMM 228 TFLOPS = 1.5× fp16 cuBLAS;在线量化端到端 72.9,瓶颈在量化 kernel |
 | [EXP-T07](records/EXP-T07_moe_permute.md) moe_permute | MoE unpermute gather 式无原子 12.5× vs torch;索引构建成本反而大于搬运本体 |
+| [EXP-T08](records/EXP-T08_smem_stage_probe.md) smem_stage_probe | 编译期资源探针证伪「num_stages = 缓冲份数」:实测份数 = N−1,故 stages=2 尚未双缓冲、stages=3 才是 |
 
 ## 测量方法
 

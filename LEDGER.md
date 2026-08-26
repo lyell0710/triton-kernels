@@ -14,6 +14,7 @@
 | [EXP-T05](records/EXP-T05_cudagraph.md) | cudagraph | 2026-08-24 | 完成 | launch 塌缩 **11.6×**(36.8→3.1µs/调用,data/raw/EXP-T05/) |
 | [EXP-T06](records/EXP-T06_fp8_gemm.md) | fp8_gemm | 2026-08-24 | 完成 | per-block FP8 **227.7/235.7 TFLOPS = 1.5× fp16 cuBLAS**(data/raw/EXP-T06/) |
 | [EXP-T07](records/EXP-T07_moe_permute.md) | moe_permute | 2026-08-24 | 完成 | unpermute **12.5×** vs torch,gather 式无原子(data/raw/EXP-T07/) |
+| [EXP-T08](records/EXP-T08_smem_stage_probe.md) | smem_stage_probe | 2026-08-25 | 完成 | 缓冲份数 = **num_stages−1**(编译期 metadata.shared 实测,data/raw/EXP-T08/) |
 
 > **stability(2026-08-24 晚)**:headline 数字已全部 ≥3 轮复测,mean/std 见 `data/derived/exp-t01_stability_3rounds.csv` 等五份(T01/02/05/06/07);T05 launch 塌缩勘误 11.8×→**11.6×**。
 > 阶段二增量(8/24):FP8 per-block GEMM(theory/06)、MoE permute/unpermute(theory/07,对照 DeepEP)、flash-decoding(theory/05)、CUDA Graph(theory/03 第四层)、kperf 无计数器观测(theory/04);TP=2 引擎侧见 llm-engine#EXP-D22。

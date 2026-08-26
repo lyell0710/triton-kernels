@@ -1,0 +1,6 @@
+# manifest — data/raw/EXP-T08/
+file: 20260825T230651_smem_regs_probe.json
+sha256: b216e8a0a07fd9be3c2fa9c959db3b05d31ca2db7b017865b16283cda6c85aa9
+provenance: env=py312(triton3.6/torch2.11) sha=a438d04 cmd="python scripts/probe_smem_regs.py" date=2026-08-25T23:06:51+00:00 gpu="NVIDIA GeForce RTX 4090" driver=610.57.04
+note: 编译期资源探针(metadata.shared / n_regs),非 benchmark 时延数据;
+      BN=128+stages=3 一行是 Triton OutOfResources 异常字符串,如实存盘。
