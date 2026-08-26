@@ -1,5 +1,7 @@
 # EXP-T05 · CUDA Graph 消 launch 开销实测(launch 三层结论的"解法"层)
 
+> **一句话结论**：CUDA Graph 把 Triton softmax 的单次调用从 36.76µs 压到 **3.11µs（11.8×）**——「Triton 小核慢」的正解是上 Graph，不是改写成 CUDA。
+
 ## 0. 元信息
 | 日期 | 2026-08-24 | 环境 | v0.25.1-venv， RTX 4090 | 状态 | 完成 |
 |---|---|---|---|---|---|

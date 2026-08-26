@@ -1,5 +1,7 @@
 # EXP-T09 · Triton 版 LLM 融合逐元素算子(fused_add_rmsnorm / rope / silu_and_mul)
 
+> **一句话结论**：HBM 区间里 Triton、手写 CUDA、torch.compile 三者两两差距 <2%，全部收敛到峰值 88-92%；分水岭是**融不融合**（相对 pytorch_eager 1.7-5.2x），不是用什么语言写。
+
 ## 0 元信息
 
 | 项 | 值 |

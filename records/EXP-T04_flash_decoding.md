@@ -1,5 +1,7 @@
 # EXP-T04 · Flash-Decoding(split-K decode attention)
 
+> **一句话结论**：split-K decode attention 在长 Skv 上跑出提速，短 Skv 段被两次 Triton launch 的地板压平；本实验最贵的一课是接线：对 KV cache 切片做 `.contiguous()` 会每层每步整拷，TPOT 反而 +0.5ms。
+
 ## 0. 元信息
 | 日期 | 2026-08-24 | 环境 | v0.25.1-venv， RTX 4090 | 状态 | 完成 |
 |---|---|---|---|---|---|

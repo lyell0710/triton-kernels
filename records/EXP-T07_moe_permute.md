@@ -1,5 +1,7 @@
 # EXP-T07 · MoE Permute/Unpermute(dispatch-combine 单卡版)
 
+> **一句话结论**：MoE dispatch-combine 的 unpermute 快 torch 参考 **12.5×**，来源是融合（四趟 kernel 合成一读一写）；但索引构建本身 0.27ms 已超过两次搬运之和——这正是 vLLM 要为它专门写 CUDA kernel 的实证理由。
+
 ## 0. 元信息
 | 日期 | 2026-08-24 | 环境 | v0.25.1-venv， RTX 4090 | 状态 | 完成 |
 |---|---|---|---|---|---|
