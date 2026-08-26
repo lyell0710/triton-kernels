@@ -1,0 +1,16 @@
+# provenance: env=venv:/root/venvs/main sha=see-Kernel_Optimazation cmd="见下方权威路径" date=2026-08-26T08:00:00Z gpu="NVIDIA GeForce RTX 4090" driver=610.57.04 cuda=13.2
+
+EXP-T09 的原始数据不在本仓,权威在姊妹仓 Kernel_Optimazation —— 因为本实验的
+三条 Triton 臂与手写 CUDA 臂是在【同一个 harness、同一次运行】里受测的,
+数字只有一份,复制到本仓会造成两代数字并存(单一事实源)。
+
+权威 raw(每算子 3 轮独立落盘,首行含 provenance):
+  /root/projects/Kernel_Optimazation/fused-norm/project-proof/data/20260826T*_fused-norm_stability_r{1,2,3}.csv
+  /root/projects/Kernel_Optimazation/rope/project-proof/data/20260826T*_rope_stability_r{1,2,3}.csv
+  /root/projects/Kernel_Optimazation/activation/project-proof/data/20260826T*_activation_stability_r{1,2,3}.csv
+
+归并表(由 Kernel_Optimazation/scripts/derive_stability.py 从上述 raw 重算):
+  .../{fused-norm,rope,activation}/project-proof/data/derived_*_stability.csv
+
+Triton 臂在上述 CSV 中的 version 列取值为 `triton`。
+对应记录:Kernel_Optimazation#EXP-K05(数字权威)与本仓 records/EXP-T09(实现与踩坑)。
