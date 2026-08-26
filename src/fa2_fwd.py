@@ -16,9 +16,9 @@ docs/theory/01_flashattention.md。
 接口契约:q (B,Hq,S,D),k/v (B,Hkv,S,D),Hq % Hkv == 0,D ∈ {64,128},
 S 任意(非整除由 mask 兜底);返回与 q 同 dtype/形状的 O。
 
-性能特征(EXP-T01,4090):S=4K(B1·H32/8·D128 fp16)达 SDPA-flash 的 87%
+性能特征(EXP-T01（Triton FA2 forward）,4090):S=4K(B1·H32/8·D128 fp16)达 SDPA-flash 的 87%
 (1.118±0.002 vs 0.975±0.002 ms,123 TFLOPS);kperf 观测算力利用 74%、
-occupancy 仅 17%(regs 213/线程,终端级证据登记于 EXP-T06 §7)——
+occupancy 仅 17%(regs 213/线程,终端级证据登记于 EXP-T06（FP8 GEMM）§7)——
 compute-bound,靠寄存器 ILP 而非高 occupancy 藏延迟;与官方 FA2 差的
 ~12% 在 tensor-core 布局/双缓冲/warp 专业化这层抽象税。
 

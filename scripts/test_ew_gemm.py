@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT
-"""RMSNorm/Softmax/INT8-quantize/GEMM 的正确性 gate + benchmark(EXP-T02/T03)。
+"""RMSNorm/Softmax/INT8-quantize/GEMM 的正确性 gate + benchmark(EXP-T02（流水线 GEMM）/T03)。
 
 对照物命名诚实(CORE 铁律 6):pytorch_eager = 朴素 torch 表达式;
 cublas = torch.matmul(fp16);cuda_v4 = Kernel_Optimazation 仓同尺寸实测值
-(4090,EXP-K01 提交,fp32 口径,手工引用不重跑)。
+(4090,EXP-K01（四 kernel 4090 重基准）提交,fp32 口径,手工引用不重跑)。
 GEMM 的 num_stages 扫描单列——"双缓冲的贡献"就是 stages=1→2 的差。
 """
 

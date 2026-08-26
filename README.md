@@ -29,7 +29,7 @@
 
 ## 关键发现
 
-**"Triton 比 CUDA 慢"是个没有意义的裸命题——必须拆三个口径。** 同一行核(softmax)在带宽主导尺寸下 Triton 与 torch 同速(8192²:917 vs 921 GB/s,双双贴 4090 roofline 91%);小尺寸看到的 4× "差距"全部来自主机侧 launch(Triton Python 分发 ~30µs > torch C++ ~8µs > 裸 CUDA ~5µs);而端到端还有第三层反转:Triton 单 kernel 融合(52µs)反超"更快的 CUDA kernel + 3 次前置 launch"(65µs)——融合数比单核快慢更重要。launch 这一层的终局解是 CUDA Graph:重放把每调用 36.2µs 塌缩到 3.11µs,此后 Triton 反超 torch eager(EXP-T03/T05)。
+**"Triton 比 CUDA 慢"是个没有意义的裸命题——必须拆三个口径。** 同一行核(softmax)在带宽主导尺寸下 Triton 与 torch 同速(8192²:917 vs 921 GB/s,双双贴 4090 roofline 91%);小尺寸看到的 4× "差距"全部来自主机侧 launch(Triton Python 分发 ~30µs > torch C++ ~8µs > 裸 CUDA ~5µs);而端到端还有第三层反转:Triton 单 kernel 融合(52µs)反超"更快的 CUDA kernel + 3 次前置 launch"(65µs)——融合数比单核快慢更重要。launch 这一层的终局解是 CUDA Graph:重放把每调用 36.2µs 塌缩到 3.11µs,此后 Triton 反超 torch eager(EXP-T03《三件套移植 + torch 绑定》/T05)。
 
 ```mermaid
 flowchart TD
@@ -42,11 +42,11 @@ flowchart TD
     F --> G
 ```
 
-**流水线深度必须按"搬运延迟/计算时长"比值配,双缓冲不是自动奖励。** 同一 GEMM kernel 只变 num_stages:2 级(经典双缓冲)仅 +1%,3 级才 +21% 并打平 cuBLAS——Ada 上一次 BLOCK_K 搬运的延迟长于一轮 tensor core dot,2 级流水藏不住它,必须再加一级(EXP-T02)。另一个反直觉数字:该 GEMM occupancy 只有 17%(寄存器限制)却打出 98% 峰值算力——tensor core kernel 靠寄存器堆 ILP 藏延迟,比高 occupancy 更值钱,"occupancy 低"只在延迟藏不住时才是嫌疑人。
+**流水线深度必须按"搬运延迟/计算时长"比值配,双缓冲不是自动奖励。** 同一 GEMM kernel 只变 num_stages:2 级(经典双缓冲)仅 +1%,3 级才 +21% 并打平 cuBLAS——Ada 上一次 BLOCK_K 搬运的延迟长于一轮 tensor core dot,2 级流水藏不住它,必须再加一级(EXP-T02《流水线 GEMM》)。另一个反直觉数字:该 GEMM occupancy 只有 17%(寄存器限制)却打出 98% 峰值算力——tensor core kernel 靠寄存器堆 ILP 藏延迟,比高 occupancy 更值钱,"occupancy 低"只在延迟藏不住时才是嫌疑人。
 
-**FP8 的 2× 理论收益在 Ada 上只能吃到 1.5×,缺口是指令世代的架构税。** DeepGEMM 的细粒度缩放代数(权重 128×128 块 scale + 激活 per-token-group scale)可以原样搬到 sm_89,但 Hopper 的 wgmma 有原生 scale 槽、TMA 管搬运,Ada 只有同步 mma + cp.async,缩放乘法只能在累加器侧手乘、fp32 累加占算力,fp8 mma 峰值本身也打折。另一半真相:1.5× 是预量化孤立 GEMM 的数字,在线量化端到端只有 72.9 TFLOPS——量化 kernel 才是瓶颈,这正是真实 serving 里权重预量化、激活量化融合进上游算子的原因(EXP-T06)。
+**FP8 的 2× 理论收益在 Ada 上只能吃到 1.5×,缺口是指令世代的架构税。** DeepGEMM 的细粒度缩放代数(权重 128×128 块 scale + 激活 per-token-group scale)可以原样搬到 sm_89,但 Hopper 的 wgmma 有原生 scale 槽、TMA 管搬运,Ada 只有同步 mma + cp.async,缩放乘法只能在累加器侧手乘、fp32 累加占算力,fp8 mma 峰值本身也打折。另一半真相:1.5× 是预量化孤立 GEMM 的数字,在线量化端到端只有 72.9 TFLOPS——量化 kernel 才是瓶颈,这正是真实 serving 里权重预量化、激活量化融合进上游算子的原因(EXP-T06《FP8 GEMM》)。
 
-**MoE unpermute 的 12.5× 来自把 scatter-add 翻转成 gather。** 直觉实现是每个专家输出行原子加回原 token 位;改成每个 token 自己去收 topk 行加权求和,则无竞争、求和顺序确定(数值可复现)。测量还给出一个结构性发现:索引构建(argsort,0.27ms)比数据搬运本体更贵——这就是 vLLM 为它写专用 kernel(moe_align_block_size)的存在理由(EXP-T07)。
+**MoE unpermute 的 12.5× 来自把 scatter-add 翻转成 gather。** 直觉实现是每个专家输出行原子加回原 token 位;改成每个 token 自己去收 topk 行加权求和,则无竞争、求和顺序确定(数值可复现)。测量还给出一个结构性发现:索引构建(argsort,0.27ms)比数据搬运本体更贵——这就是 vLLM 为它写专用 kernel(moe_align_block_size)的存在理由(EXP-T07《MoE Permute/Unpermute》)。
 
 ## 代码结构
 
@@ -119,15 +119,15 @@ bench 结果只追加新文件、从不覆盖已有原始数据;每组 `data/raw
 
 | 记录 | 结论 |
 |---|---|
-| [EXP-T01](records/EXP-T01_fa2_forward.md) fa2_forward | FA2 forward 从零实现(causal+GQA+非整除),6 形状正确性全过;tile 扫描定优配,S=4K 达 SDPA-flash 87% |
-| [EXP-T02](records/EXP-T02_gemm_pipeline.md) gemm_pipeline | num_stages 1 至 4 扫描:3 级流水 160.5 TFLOPS 打平 cuBLAS,8B up_proj 形状反超 4.8% |
-| [EXP-T03](records/EXP-T03_ports_and_binding.md) ports_and_binding | "Triton 慢"排障:设备侧同速、开销在 launch、端到端看融合;mask 假设被对照实验证伪(照记) |
-| [EXP-T04](records/EXP-T04_flash_decoding.md) flash_decoding | flash-decoding(split-K)32K 上下文 2.39× vs naive(单轮),GQA 原生不 repeat KV |
-| [EXP-T05](records/EXP-T05_cudagraph.md) cudagraph | CUDA Graph 把每调用 36.2µs 塌缩到 3.11µs(11.6×),graph 后 Triton 反超 torch |
-| [EXP-T06](records/EXP-T06_fp8_gemm.md) fp8_gemm | FP8 per-block GEMM 228 TFLOPS = 1.5× fp16 cuBLAS;在线量化端到端 72.9,瓶颈在量化 kernel |
-| [EXP-T07](records/EXP-T07_moe_permute.md) moe_permute | MoE unpermute gather 式无原子 12.5× vs torch;索引构建成本反而大于搬运本体 |
-| [EXP-T08](records/EXP-T08_smem_stage_probe.md) smem_stage_probe | 编译期资源探针证伪「num_stages = 缓冲份数」:实测份数 = N−1,故 stages=2 尚未双缓冲、stages=3 才是 |
-| [EXP-T09](records/EXP-T09_llm_fused_elementwise.md) | LLM 融合逐元素算子三件套(fused_add_rmsnorm / rope / silu_and_mul)作为手写 CUDA 的同 harness 对照臂:HBM 区间 922.1 / 898.5 / 928.0 GB/s(91.5% / 89.1% / 92.1% 峰值),与手写两两差 <2%,补上「Triton vs CUDA」判断曲线第三点;数字权威在 Kernel_Optimazation#EXP-K05 |
+| [EXP-T01 Triton FA2 forward(简化版):正确性 + 调优 + 对标](records/EXP-T01_fa2_forward.md) | FA2 forward 从零实现(causal+GQA+非整除),6 形状正确性全过;tile 扫描定优配,S=4K 达 SDPA-flash 87% |
+| [EXP-T02 流水线 GEMM:num_stages 扫描量化"双缓冲的贡献"](records/EXP-T02_gemm_pipeline.md) | num_stages 1 至 4 扫描:3 级流水 160.5 TFLOPS 打平 cuBLAS,8B up_proj 形状反超 4.8% |
+| [EXP-T03 三件套移植 + torch 绑定:launch 开销与融合的三层反转](records/EXP-T03_ports_and_binding.md) | "Triton 慢"排障:设备侧同速、开销在 launch、端到端看融合;mask 假设被对照实验证伪(照记) |
+| [EXP-T04 Flash-Decoding(split-K decode attention)](records/EXP-T04_flash_decoding.md) | flash-decoding(split-K)32K 上下文 2.39× vs naive(单轮),GQA 原生不 repeat KV |
+| [EXP-T05 CUDA Graph 消 launch 开销实测(launch 三层结论的"解法"层)](records/EXP-T05_cudagraph.md) | CUDA Graph 把每调用 36.2µs 塌缩到 3.11µs(11.6×),graph 后 Triton 反超 torch |
+| [EXP-T06 FP8 GEMM(per-block scaling,sm_89 mma 路线)](records/EXP-T06_fp8_gemm.md) | FP8 per-block GEMM 228 TFLOPS = 1.5× fp16 cuBLAS;在线量化端到端 72.9,瓶颈在量化 kernel |
+| [EXP-T07 MoE Permute/Unpermute(dispatch-combine 单卡版)](records/EXP-T07_moe_permute.md) | MoE unpermute gather 式无原子 12.5× vs torch;索引构建成本反而大于搬运本体 |
+| [EXP-T08 num_stages 与 shared memory 份数的映射:编译期资源探针](records/EXP-T08_smem_stage_probe.md) | 编译期资源探针证伪「num_stages = 缓冲份数」:实测份数 = N−1,故 stages=2 尚未双缓冲、stages=3 才是 |
+| [EXP-T09 Triton 版 LLM 融合逐元素算子(fused_add_rmsnorm / rope / silu_and_mul)](records/EXP-T09_llm_fused_elementwise.md) | LLM 融合逐元素算子三件套(fused_add_rmsnorm / rope / silu_and_mul)作为手写 CUDA 的同 harness 对照臂:HBM 区间 922.1 / 898.5 / 928.0 GB/s(91.5% / 89.1% / 92.1% 峰值),与手写两两差 <2%,补上「Triton vs CUDA」判断曲线第三点;数字权威在 Kernel_Optimazation#EXP-K05《LLM 融合逐元素算子三件套》 |
 
 ## 测量方法
 

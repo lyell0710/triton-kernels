@@ -14,7 +14,7 @@
   开销;mask 假设证伪照记(猜错也入档)。
 - **产物**:src 4 件、scripts 2 件、records T01-03、theory 01-03(五节全
   实证)、raw 3 组、README 红线表。
-- **下一步**:llm-engine EXP-D15/D16 接入(本仓 fa2_forward 与
+- **下一步**:llm-engine EXP-D15《接入自研 Triton FA2》/D16 接入(本仓 fa2_forward 与
   gemm_pipelined.linear 已按其 attention_impl/linear 契约留口)。
 ## §2 fp32 通道 + 引擎接入协同(2026-08-23 深夜)
 
@@ -42,7 +42,7 @@
   kernel 的存在理由)。
 - **产物**:src/{fp8_gemm,moe_permute,flash_decode}.py、kperf.py、
   records T04~T07、theory 04~07、raw 四组。
-- **下一步**:阶段二清单四项全闭环(TP=2 在 llm-engine#EXP-D22);
+- **下一步**:阶段二清单四项全闭环(TP=2 在 llm-engine#EXP-D22《TP=2 张量并行》);
   阶段三仅剩"读 DeepEP"(纯阅读)与真实 PR(用户动作)。
 
 ## §4 2026-08-24 · 审计收尾批次
@@ -51,7 +51,7 @@
   raw 改写(旧版移 docs/archive/ 标 superseded);②theory/01/03 的
   88%→87%、慢 12%→13%(4K 严格值 87.45%);③6 组 raw 目录补
   manifest.txt(sha256+provenance 勘注,不动文件本体不重命名);
-  ④kperf 三卡登记为终端级证据(EXP-T06 §7,theory/04 §3 指去);
+  ④kperf 三卡登记为终端级证据(EXP-T06《FP8 GEMM》§7,theory/04 §3 指去);
   ⑤docs/talk/ 首版讲稿(逐句过红线表);⑥README 数字加"单轮"限定+
   T01~T07 §7 补 stability backlog;⑦theory/05-07 补第 5 节"延伸"、
   Q&A 节名统一;⑧README 结构节更新、红线表补 cuBLAS 口径句。
@@ -143,7 +143,7 @@
 
 **做了什么**:新增 `src/llm_fused.py`,三个 kernel(fused_add_rmsnorm / rope /
 silu_and_mul),作为姊妹仓 Kernel_Optimazation 三个手写 CUDA 算子的同协议对照臂。
-数字的权威在 Kernel#EXP-K05(三种实现在同一 harness 下受测),本仓 records/EXP-T09
+数字的权威在 Kernel#EXP-K05《LLM 融合逐元素算子三件套》(三种实现在同一 harness 下受测),本仓 records/EXP-T09
 只登记 Triton 侧实现与踩坑。
 
 **为什么**:补上本项目「Triton vs CUDA」判断曲线的第三个点(访存主导融合逐元素);
@@ -152,10 +152,10 @@ silu_and_mul),作为姊妹仓 Kernel_Optimazation 三个手写 CUDA 算子的同
 
 **关键数字**:HBM 区间 922.1 / 898.5 / 928.0 GB/s(91.5% / 89.1% / 92.1% 峰值),
 与手写 CUDA 两两差 <2%,假设成立。L2 与 decode 区间落后(手写快 1.7–2.9x / 5–6x),
-归因分别为线程配置控制粒度与 Python 分发开销(后者与 EXP-T03 的 ~30us 一致)。
+归因分别为线程配置控制粒度与 Python 分发开销(后者与 EXP-T03《三件套移植 + torch 绑定》的 ~30us 一致)。
 
 **产物路径**:`src/llm_fused.py`、`records/EXP-T09_llm_fused_elementwise.md`;
-已被 llm-engine 作为 `LLME_FUSED=triton` 后端接入(EXP-D23,TTFT -20.5%)。
+已被 llm-engine 作为 `LLME_FUSED=triton` 后端接入(EXP-D23《融合逐元素算子接入》,TTFT -20.5%)。
 
 **踩坑(rope 粒度试错三轮,值得复刻的诊断路径)**:①一 program 一 (token,head) →
 100 万 program,调度开销吃掉一半;②一 program 一 token + 二维 tile → 行跨度 D,

@@ -1,6 +1,6 @@
 ---
 topic: 双缓冲 / 软件流水(GEMM)
-status: 完成(实证=EXP-T02)
+status: 完成(实证=EXP-T02《流水线 GEMM》)
 ---
 
 # 02 · 双缓冲:一件事的 CUDA 写法与 Triton 写法
@@ -47,7 +47,7 @@ global→shared 延迟 ≳ 一轮 tl.dot 的时长,2 级只藏了发射、藏不
 延迟;3 级起气泡才填平——最优深度在 3/4 间随形状摇摆(square4k 为 3、
 qwen8b 为 4,EXP-T02 §6),不宣称唯一最优深度。"双缓冲"是流水思想的
 最小版,不是终点——深度要按 延迟/计算比 配。代价同样可测:stage 数 ∝
-shared memory 占用(FA2 的 BN=128 配置就是这么 OOM 的,EXP-T01)。
+shared memory 占用(FA2 的 BN=128 配置就是这么 OOM 的,EXP-T01《Triton FA2 forward》)。
 
 **另一半性能:grouped launch**(kernel 第 24-33 行):把 CTA 按 GROUP_M
 分组蛇形排,同组共享 B 块 → L2 命中率↑。与流水线正交,一起构成

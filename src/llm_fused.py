@@ -7,8 +7,8 @@
 与 Kernel_Optimazation 下的手写 CUDA 版本一一对应,两边在同一个 harness 下受测
 (Kernel_Optimazation/<op>/bench.py 的 triton_* 臂)。这条对照是本项目
 「什么时候该用 CUDA」判断曲线的第三个点:
-  - 计算主导的 GEMM:手写 CUDA wmma 够到真 cuBLAS 的 86%(Kernel#EXP-K02)
-  - 融合型 attention:同一套 wmma 只够到自家 Triton 的 28%(Kernel#EXP-K03)
+  - 计算主导的 GEMM:手写 CUDA wmma 够到真 cuBLAS 的 86%(Kernel#EXP-K02（CUDA Tensor Core GEMM 版本梯）)
+  - 融合型 attention:同一套 wmma 只够到自家 Triton 的 28%(Kernel#EXP-K03（CUDA FA2 forward 简化版版本梯）)
   - 访存主导的融合逐元素算子:本文件 —— 预期两边都贴带宽墙、打平
 前两点已测,第三点由本文件补上。
 

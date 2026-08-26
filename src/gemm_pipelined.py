@@ -11,10 +11,10 @@
 接口契约:gemm(a (M,K), b (K,N)) → (M,N),fp16 输入 fp32 累加输出 fp16;
 linear() 提供 nn.Linear 语义供 llm-engine 接入。
 
-性能特征(EXP-T02,4090 fp16):4096³ 随 stages 1→4 = 131.9/133.5/160.5/
+性能特征(EXP-T02（流水线 GEMM）,4090 fp16):4096³ 随 stages 1→4 = 131.9/133.5/160.5/
 157.1 TFLOPS,最优 stages=3 打平 cuBLAS 159.8(3 轮复现 159.4±1.2 vs
 160.0±0.7);Qwen3-8B up_proj 形状 154.4 vs 147.3 反超 4.8%。kperf 观测:
-算力 98% 而 occupancy 仅 17%(regs 170/线程,终端级证据登记于 EXP-T06 §7)。
+算力 98% 而 occupancy 仅 17%(regs 170/线程,终端级证据登记于 EXP-T06（FP8 GEMM）§7)。
 
 面试点(两个反直觉):
 1. stages=2(经典双缓冲)只 +1%,stages=3 才 +21%——流水深度要按

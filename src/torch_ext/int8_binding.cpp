@@ -1,5 +1,5 @@
-// torch extension 绑定:零改动复用 Kernel_Optimazation(EXP-K01)的
-// quantize_v4 CUDA kernel,接进 torch 生态做同尺寸对照(EXP-T03)。
+// torch extension 绑定:零改动复用 Kernel_Optimazation(EXP-K01（四 kernel 4090 重基准）)的
+// quantize_v4 CUDA kernel,接进 torch 生态做同尺寸对照(EXP-T03（三件套移植 + torch 绑定）)。
 // 讲解点:.cu 保持原样零改动——绑定层只做 张量校验 + scale 计算 + 指针透传。
 //
 // 接口契约:input (channels, hw) fp32 CUDA 张量 → {int8 q, fp32 per-channel

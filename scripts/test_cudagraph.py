@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """EXP-T05: CUDA Graph 消 launch 开销实测。
 
-场景 = launch 主导的小 kernel 高频调用(EXP-T03 的 1024² softmax,
+场景 = launch 主导的小 kernel 高频调用(EXP-T03（三件套移植 + torch 绑定）的 1024² softmax,
 eager 每调用 ~37µs 其中 ~30µs 是 Python 侧分发)。把 N 次调用录成一张
 graph,重放时 launch 全部变 graph 节点——每调用成本应塌缩到 kernel 本体。
 """

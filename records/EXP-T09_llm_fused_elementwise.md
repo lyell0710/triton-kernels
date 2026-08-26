@@ -1,4 +1,4 @@
-# EXP-T09 Triton 版 LLM 融合逐元素算子(fused_add_rmsnorm / rope / silu_and_mul)
+# EXP-T09 · Triton 版 LLM 融合逐元素算子(fused_add_rmsnorm / rope / silu_and_mul)
 
 ## 0 元信息
 
@@ -7,15 +7,15 @@
 | 日期 | 2026-08-26 |
 | 环境 | 4090 容器,venv:/root/venvs/main(torch 2.13.0+cu132, triton 3.7.1) |
 | 状态 | 完成 |
-| 关联 | **数字的权威在 Kernel_Optimazation#EXP-K05**(三种实现同一 harness 受测);本记录只登记 Triton 侧的实现与踩坑。引擎接入见 llm-engine#EXP-D23 |
+| 关联 | **数字的权威在 Kernel_Optimazation#EXP-K05《LLM 融合逐元素算子三件套》**(三种实现同一 harness 受测);本记录只登记 Triton 侧的实现与踩坑。引擎接入见 llm-engine#EXP-D23《融合逐元素算子接入》 |
 | 产物 | `src/llm_fused.py` |
 
 ## 1 目的与假设
 
 为姊妹仓 Kernel_Optimazation 的三个手写 CUDA 算子提供同协议的 Triton 对照臂,
 补上本项目「什么时候该用 CUDA」判断曲线的第三个点:**访存主导的融合逐元素算子**。
-前两点已有:计算主导 GEMM 手写够到真 cuBLAS 85.6%(Kernel#EXP-K02);
-融合型 attention 的 wmma 版只够到自家 Triton 28%(Kernel#EXP-K03)。
+前两点已有:计算主导 GEMM 手写够到真 cuBLAS 85.6%(Kernel#EXP-K02《CUDA Tensor Core GEMM 版本梯》);
+融合型 attention 的 wmma 版只够到自家 Triton 28%(Kernel#EXP-K03《CUDA FA2 forward 简化版版本梯》)。
 
 假设:本类算子上 Triton 与手写 CUDA 在 HBM 区间打平(±5%),因为两者撞同一堵带宽墙。
 
@@ -58,7 +58,7 @@ Triton 在这类算子上有一处结构优势值得记:**手写 CUDA 需要显�
 表达 rope 的"q/k 合并 launch"(手写 v2 那一级),见 §7。
 
 落后的两个区间也有明确归因:decode 是 Triton 的 Python 分发开销
-(与 EXP-T03 的 ~30us 一致);L2 区间是手写版更细的访存与线程配置控制。
+(与 EXP-T03《三件套移植 + torch 绑定》的 ~30us 一致);L2 区间是手写版更细的访存与线程配置控制。
 
 ## 7 异常、偏差与开放问题
 

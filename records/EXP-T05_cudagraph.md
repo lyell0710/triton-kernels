@@ -3,7 +3,7 @@
 ## 0. 元信息
 | 日期 | 2026-08-24 | 环境 | v0.25.1-venv, RTX 4090 | 状态 | 完成 |
 |---|---|---|---|---|---|
-关联:EXP-T03 backlog。
+关联:EXP-T03《三件套移植 + torch 绑定》backlog。
 
 ## 1. 目的与假设
 把 N=100 次 launch 主导的小 kernel(1024² softmax)录成一张 graph 重放。
@@ -28,7 +28,7 @@ graph 后 triton(3.11)反超 torch eager(7.93)与 torch graph(4.04)。
 剩下的 3.1µs ≈ kernel 本体+节点调度——**"Triton 小核慢"的正解是上
 Graph,不是换 CUDA**(graph 后 triton kernel 本体反而最快)。
 这正是 vLLM 用 CUDA Graph 吃 decode launch 海的机理
-(vllm/experiments#EXP-014 的 graph-trace 教训同根)。
+(vllm/experiments#EXP-014《D1 MoE decode 分解》的 graph-trace 教训同根)。
 
 ## 7. 异常、偏差与开放问题
 捕获要求地址稳定(静态输入/输出);动态 shape 需分桶捕获(vLLM 的

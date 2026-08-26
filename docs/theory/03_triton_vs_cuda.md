@@ -1,13 +1,13 @@
 ---
 topic: Triton vs CUDA 性能差的真实来源
-status: 完成(实证=EXP-T03)
+status: 完成(实证=EXP-T03《三件套移植 + torch 绑定》)
 ---
 
 # 03 · Triton vs CUDA:差距不在 kernel,在 launch 与融合
 
 > 8/24 增补第四层:**CUDA Graph 把 launch 归零**——同一 1024² softmax,
 > eager 36.2µs/调用(3 轮) → graph 重放 **3.11µs(11.6×,3 轮:36.16±0.11 → 3.11±0.00)**,反超 torch eager;
-> "Triton 小核慢"的正解是上 Graph,不是换 CUDA(EXP-T05)。
+> "Triton 小核慢"的正解是上 Graph,不是换 CUDA(EXP-T05《CUDA Graph 消 launch 开销实测》)。
 
 ## 1. 一句话结论
 
@@ -20,7 +20,7 @@ status: 完成(实证=EXP-T03)
 ## 2. 机制(排障过程即讲解,EXP-T03 §7 的三步)
 
 1. **现象**:softmax 1024² Triton 36µs vs torch 8µs(4.4×);int8 quantize
-   更差。CUDA v4 同尺寸 5.9µs(EXP-K01)。
+   更差。CUDA v4 同尺寸 5.9µs(EXP-K01《四 kernel 4090 重基准》)。
 2. **假设一(证伪)**:掩码 load 阻断向量化 → 加"整除走无 mask 快路径",
    数字纹丝不动——**猜测要交给对照实验,哪怕猜错也要记录**。
 3. **假设二(坐实)**:尺寸三点法。8×8(纯开销)37.4µs ≈ 1024² 的
@@ -30,10 +30,10 @@ status: 完成(实证=EXP-T03)
 
 **结论怎么用**(选型准则):
 - 大 kernel / 长序列 / 融合机会多 → Triton 白给(FA2 87% 效率
-  (EXP-T01),GEMM 打平(EXP-T02));
+  (EXP-T01《Triton FA2 forward》),GEMM 打平(EXP-T02《流水线 GEMM》));
 - 微 kernel 高频调用 → 裸 CUDA/C++ 扩展,或 CUDA Graph 把 launch 摊平
   (vLLM 正是用 CUDA Graph 吃掉 decode 的 launch 海——与
-  vllm/experiments#EXP-014 的 graph-trace 陷阱同根);
+  vllm/experiments#EXP-014《D1 MoE decode 分解》的 graph-trace 陷阱同根);
 - torch 集成层:**融合数(launch 数)比单 kernel 快慢更重要**——
   CUDA v4 kernel 快 10×,套上 3 个 scale 前置 launch 后端到端反输。
 

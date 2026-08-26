@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT
-"""EXP-T06: FP8 per-block GEMM 正确性 + benchmark。
+"""EXP-T06（FP8 GEMM）: FP8 per-block GEMM 正确性 + benchmark。
 
 正确性双层:①kernel 精确性 = 与"逐块反量化后 fp32 精算"比(应 ~1e-3 级,
 只含累加序差);②量化保真 = 与原 fp16 矩阵乘比(fp8 量化误差本体)。
-bench 三对照:fp8 prequant / fp16 triton gemm(EXP-T02)/ cublas fp16。
+bench 三对照:fp8 prequant / fp16 triton gemm(EXP-T02（流水线 GEMM）)/ cublas fp16。
 """
 import json, sys, time
 from pathlib import Path

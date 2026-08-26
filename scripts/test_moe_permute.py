@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""EXP-T07: MoE permute/unpermute 正确性 + bench(vs torch index ops)。"""
+"""EXP-T07（MoE Permute/Unpermute）: MoE permute/unpermute 正确性 + bench(vs torch index ops)。"""
 import json, sys, time
 from pathlib import Path
 import torch

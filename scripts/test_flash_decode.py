@@ -1,4 +1,4 @@
-"""EXP-T04 backlog 补测:flash-decoding 正确性 gate + 3 轮可存盘 bench。
+"""EXP-T04（Flash-Decoding） backlog 补测:flash-decoding 正确性 gate + 3 轮可存盘 bench。
 协议=EXP-T04 原协议:B=1,Hq=16,Hkv=8,D=128,bf16,Skv ∈ {512,2048,8192,32768};
 对照 = naive decode attention(torch,fp16,GQA repeat)。正确性 vs fp32 精算。
 用法:python test_flash_decode.py <out.json> "<provenance>"

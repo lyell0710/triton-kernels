@@ -3,8 +3,8 @@
 ## 0. 元信息
 | 日期 | 2026-08-25 | 环境 | py312(triton3.6/torch2.11), RTX 4090, driver 610.57.04 | 状态 | 完成 |
 |---|---|---|---|---|---|
-关联:讲义 01/02 深化(docs/lectures/);解释 EXP-T02 §6「2 级只 +1%」与
-EXP-T01「BN=128 OOM(160KB)」两条结论的机理。
+关联:讲义 01/02 深化(docs/lectures/);解释 EXP-T02《流水线 GEMM》§6「2 级只 +1%」与
+EXP-T01《Triton FA2 forward》「BN=128 OOM(160KB)」两条结论的机理。
 
 ## 1. 目的与假设
 **跑前假设(判定阈值先锁)**:Triton 的 `num_stages=N` 会为喂给 `tl.dot` 的
@@ -64,7 +64,7 @@ FA2(Q tile 32 KB 常驻 + K/V 缓冲):
   OOM 只在 `num_stages=3` 出现;BN=128 + stages=2 可编译(96 KB)但寄存器打到
   255(Ada 每线程上限),说明这一档换成了寄存器压力。
 - **交叉验证**:GEMM stages=3 的 `n_regs=170`、FA2 BN=64/stages=2 的 `n_regs=213`
-  与 kperf 卡片(终端级证据,登记于 EXP-T06 §7)逐字相同;由此
+  与 kperf 卡片(终端级证据,登记于 EXP-T06《FP8 GEMM》§7)逐字相同;由此
   occupancy = 8 warps ÷ 48 warps/SM = 16.7% ≈ 17% 可由「64K regs/SM ÷
   (regs/线程 × 256 线程) < 2 ⇒ 每 SM 仅 1 个 CTA」直接推出,不再需要观测。
 

@@ -5,19 +5,19 @@
 
 ## 🧪 实验台账(状态唯一权威)
 
-| 编号 | slug | 日期 | 状态 | 关键数字(指针) |
-|---|---|---|---|---|
-| [EXP-T01](records/EXP-T01_fa2_forward.md) | fa2_forward | 2026-08-23 | 完成 | 87% of SDPA@4K(data/raw/EXP-T01/) |
-| [EXP-T02](records/EXP-T02_gemm_pipeline.md) | gemm_pipeline | 2026-08-23 | 完成 | 160.5 TFLOPS 打平 cuBLAS/8B 形状反超 4.8%(data/raw/EXP-T02/) |
-| [EXP-T03](records/EXP-T03_ports_and_binding.md) | ports_and_binding | 2026-08-23 | 完成 | launch 三层反转(EXP-T02 json + EXP-T03/) |
-| [EXP-T04](records/EXP-T04_flash_decoding.md) | flash_decoding | 2026-08-24 | 完成 | 32K 上下文 vs naive **2.39×**,GQA 原生;引擎 probe PASS |
-| [EXP-T05](records/EXP-T05_cudagraph.md) | cudagraph | 2026-08-24 | 完成 | launch 塌缩 **11.6×**(36.8→3.1µs/调用,data/raw/EXP-T05/) |
-| [EXP-T06](records/EXP-T06_fp8_gemm.md) | fp8_gemm | 2026-08-24 | 完成 | per-block FP8 **227.7/235.7 TFLOPS = 1.5× fp16 cuBLAS**(data/raw/EXP-T06/) |
-| [EXP-T07](records/EXP-T07_moe_permute.md) | moe_permute | 2026-08-24 | 完成 | unpermute **12.5×** vs torch,gather 式无原子(data/raw/EXP-T07/) |
-| [EXP-T08](records/EXP-T08_smem_stage_probe.md) | smem_stage_probe | 2026-08-25 | 完成 | 缓冲份数 = **num_stages−1**(编译期 metadata.shared 实测,data/raw/EXP-T08/) |
+| 编号 | slug | 名称 | 日期 | 状态 | 关键数字(指针) |
+|---|---|---|---|---|---|
+| [EXP-T01](records/EXP-T01_fa2_forward.md) | fa2_forward | Triton FA2 forward(简化版):正确性 + 调优 + 对标 | 2026-08-23 | 完成 | 87% of SDPA@4K(data/raw/EXP-T01/) |
+| [EXP-T02](records/EXP-T02_gemm_pipeline.md) | gemm_pipeline | 流水线 GEMM:num_stages 扫描量化"双缓冲的贡献" | 2026-08-23 | 完成 | 160.5 TFLOPS 打平 cuBLAS/8B 形状反超 4.8%(data/raw/EXP-T02/) |
+| [EXP-T03](records/EXP-T03_ports_and_binding.md) | ports_and_binding | 三件套移植 + torch 绑定:launch 开销与融合的三层反转 | 2026-08-23 | 完成 | launch 三层反转(EXP-T02 json + EXP-T03/) |
+| [EXP-T04](records/EXP-T04_flash_decoding.md) | flash_decoding | Flash-Decoding(split-K decode attention) | 2026-08-24 | 完成 | 32K 上下文 vs naive **2.39×**,GQA 原生;引擎 probe PASS |
+| [EXP-T05](records/EXP-T05_cudagraph.md) | cudagraph | CUDA Graph 消 launch 开销实测(launch 三层结论的"解法"层) | 2026-08-24 | 完成 | launch 塌缩 **11.6×**(36.8→3.1µs/调用,data/raw/EXP-T05/) |
+| [EXP-T06](records/EXP-T06_fp8_gemm.md) | fp8_gemm | FP8 GEMM(per-block scaling,sm_89 mma 路线) | 2026-08-24 | 完成 | per-block FP8 **227.7/235.7 TFLOPS = 1.5× fp16 cuBLAS**(data/raw/EXP-T06/) |
+| [EXP-T07](records/EXP-T07_moe_permute.md) | moe_permute | MoE Permute/Unpermute(dispatch-combine 单卡版) | 2026-08-24 | 完成 | unpermute **12.5×** vs torch,gather 式无原子(data/raw/EXP-T07/) |
+| [EXP-T08](records/EXP-T08_smem_stage_probe.md) | smem_stage_probe | num_stages 与 shared memory 份数的映射:编译期资源探针 | 2026-08-25 | 完成 | 缓冲份数 = **num_stages−1**(编译期 metadata.shared 实测,data/raw/EXP-T08/) |
 
 > **stability(2026-08-24 晚)**:headline 数字已全部 ≥3 轮复测,mean/std 见 `data/derived/exp-t01_stability_3rounds.csv` 等五份(T01/02/05/06/07);T05 launch 塌缩勘误 11.8×→**11.6×**。
-> 阶段二增量(8/24):FP8 per-block GEMM(theory/06)、MoE permute/unpermute(theory/07,对照 DeepEP)、flash-decoding(theory/05)、CUDA Graph(theory/03 第四层)、kperf 无计数器观测(theory/04);TP=2 引擎侧见 llm-engine#EXP-D22。
+> 阶段二增量(8/24):FP8 per-block GEMM(theory/06)、MoE permute/unpermute(theory/07,对照 DeepEP)、flash-decoding(theory/05)、CUDA Graph(theory/03 第四层)、kperf 无计数器观测(theory/04);TP=2 引擎侧见 llm-engine#EXP-D22《TP=2 张量并行》。
 
 ## 📏 措辞红线表
 

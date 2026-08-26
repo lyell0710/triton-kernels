@@ -142,9 +142,9 @@ JIT 编译、分配器首次分配全部挪到计时区间之外**。
 先把设备侧单独看清楚。8192×8192 fp32 的行 softmax,一次读一次写:
 $$2 \times 8192^2 \times 4\,\mathrm{B} = 536.9\ \mathrm{MB}$$
 存盘 raw(data/raw/EXP-T02/ew_gemm_bench.json)里 Triton 0.58497 ms、torch 0.58252 ms,
-换算即 **0.92 TB/s 量级**;仓内现行口径记 **917 / 921 GB/s**(EXP-T03 §5),对 4090 的
+换算即 **0.92 TB/s 量级**;仓内现行口径记 **917 / 921 GB/s**(EXP-T03《三件套移植 + torch 绑定》§5),对 4090 的
 1008 GB/s roofline 是 **91%**,与 kperf 卡片"带宽 91%、occ 67%(regs 限)"一致
-(终端级证据,登记于 EXP-T06 §7)。
+(终端级证据,登记于 EXP-T06《FP8 GEMM》§7)。
 
 3 轮口径同样贴合:0.584433±0.000843 ms(Triton)与 0.582353±0.000179 ms(torch),
 折算 918.7 / 921.9 GB/s(data/derived/exp-t02_stability_3rounds.csv,本讲义按同一
@@ -263,7 +263,7 @@ $12.2\,\mu s$,仍远低于 36 µs 的地板——**所以时间不变正是模�
   (src/torch_ext/int8_binding.cpp:26-32)。端到端 **65.1 µs**。
 - **Triton 融合路径**:absmax 规约、缩放、舍入、写回 scale **一趟做完**,
   **1 次 launch**(src/elementwise_kernels.py:91-113)。端到端 **51.7 µs**。
-- **裸 kernel 口径**:同一个 v4 kernel 单独 bench 只有 **5.9 µs**(EXP-K01,口径 =
+- **裸 kernel 口径**:同一个 v4 kernel 单独 bench 只有 **5.9 µs**(EXP-K01《四 kernel 4090 重基准》,口径 =
   scale 预置,不含 torch 封装)。
 
 **"更快的 kernel 输掉端到端"**:v4 本体比 Triton 版快一个量级,端到端却输 13.4 µs。
@@ -378,7 +378,7 @@ to our per-kernel cost."
 
 #### 3.4.2 数字
 
-(EXP-T05,1024² fp32 softmax × 100 调用,3 轮,每次调用 µs):
+(EXP-T05《CUDA Graph 消 launch 开销实测》,1024² fp32 softmax × 100 调用,3 轮,每次调用 µs):
 
 | 路径 | eager | + CUDA Graph | 塌缩 |
 |---|---|---|---|

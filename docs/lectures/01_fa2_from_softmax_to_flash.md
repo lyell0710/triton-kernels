@@ -21,7 +21,7 @@
   对照 = SDPA flash 后端——缺一不引(本仓措辞约定);并把差掉的那部分拆到
   "算力利用率"这一层。
 - 答上"flash-decoding 到底快几倍":**2.24±0.11×(naive repeat 预置口径)/
-  5.17±0.24×(含 repeat 实体化口径)**,32K 上下文(EXP-T04),并主动说出反面——
+  5.17±0.24×(含 repeat 实体化口径)**,32K 上下文(EXP-T04《Flash-Decoding》),并主动说出反面——
   **Skv ≤ 8K 反而只有 0.86-0.88×**,以及这个反亏为什么与算法无关。
 
 ### 1.1 本篇要建立的五条能力
@@ -117,7 +117,7 @@ $3.2\,\mathrm{ms}$;而算力账只有 $2BH_qS^2D = 137.4\,\mathrm{GFLOP}$(causal
   (Ada Tuning Guide §1.4.1.1),整卡 128 个 SM × 100 KB = 12.8 MB;1.07 GB 比它大
   两个数量级,**没有任何调度能把它留在片上**,只能走 HBM。
 
-仓内量尺(EXP-T01,3 轮):S=2048 上 naive fp32 参考 $6.694\pm0.003\,\mathrm{ms}$,本仓
+仓内量尺(EXP-T01《Triton FA2 forward》,3 轮):S=2048 上 naive fp32 参考 $6.694\pm0.003\,\mathrm{ms}$,本仓
 kernel $0.3296\pm0.0007\,\mathrm{ms}$(data/derived/exp-t01_stability_3rounds.csv)——
 20 倍的差距里算法一个 FLOP 都没少,少的全是那趟 HBM 往返。
 
@@ -153,7 +153,7 @@ FlashAttention 相对这两者的增量,不在代数而在**目标函数**:前�
   2.24× 与 5.17× 是同一批数据、同一个分子、两个分母(§5.2),二选一就是造假。
 - **公理 C(片上资源是硬墙,不是软约束)**:tile 大小、流水深度、occupancy 共用
   一份 99 KB / 64K 寄存器的预算。撞墙的表现不是"慢一点",是**编译期直接
-  OutOfResources**(EXP-T08 逐字复现)。
+  OutOfResources**(EXP-T08《num_stages 与 shared memory 份数的映射》逐字复现)。
 
 ### 2.4 为什么选"减 max"而不是"换更宽的浮点"
 
@@ -733,7 +733,7 @@ four Load/Store units, and a Special Function Unit (SFU)"。
 把本仓 FA2 的数字代进去(本讲义推导,与 EXP-T08 §6 的交叉验证一致):
 
 - num_warps=8 → 每 CTA 256 线程 = 8 warps;
-- kperf 观测 regs = 213/线程(终端级证据,登记于 EXP-T06 §7);
+- kperf 观测 regs = 213/线程(终端级证据,登记于 EXP-T06《FP8 GEMM》§7);
 - 每 CTA 需要 $213\times256 = 54528$ 个寄存器;$65536/54528 = 1.2 < 2$ →
   **每 SM 只能驻留 1 个 CTA**;
 - 占用率 $= 8\ \text{warps} / 48 = 16.7\% \approx 17\%$,与 kperf 卡片逐字相同。
@@ -1172,7 +1172,7 @@ launch,划不来就是必然。
 0.0941 / 0.0918 ms),naive 同段也平(0.0779 / 0.0816 / 0.0804)。**两条线都平,说明
 这一段的时间根本不在设备上**,都是主机侧地板:fd 每次要发 2 次 Triton launch
 (partial + combine),naive 是 3 个 torch 算子但走 C++ 分发,而同机实测的分发成本是
-Triton eager $36.2\pm0.1\,\mu s$ vs torch $8.03\pm0.74\,\mu s$(EXP-T05 3 轮)。
+Triton eager $36.2\pm0.1\,\mu s$ vs torch $8.03\pm0.74\,\mu s$(EXP-T05《CUDA Graph 消 launch 开销实测》3 轮)。
 所以 0.86-0.88 是**两条地板之比,与 KV 长度无关**——不是算法输了,是这一档 launch
 口径输了。正解在讲义 03:CUDA Graph 把 launch 塌缩 11.6×。
 

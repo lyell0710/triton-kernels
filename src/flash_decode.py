@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """Flash-Decoding(decode 阶段 Sq=1 的 attention,split-K 并行)。
 
-解决什么问题:FA2 的 M-tile 在 Sq=1 时全废(EXP-T01 §7)——grid 只剩
+解决什么问题:FA2 的 M-tile 在 Sq=1 时全废(EXP-T01（Triton FA2 forward）§7)——grid 只剩
 B*Hq 个 program,长上下文时大量 SM 闲置。decode 的并行度必须改从 KV 序列
 维取:把 KV 切成 num_splits 段,每段独立算 (m_p, l_p, acc_p) 三个部分
 统计量(与 FA 的 online softmax 同一套代数),再用一次归并
@@ -19,7 +19,7 @@ B*Hq 个 program,长上下文时大量 SM 闲置。decode 的并行度必须改�
 这是一次跨段规约依赖——log-sum-exp 不能交换成朴素原子加;两个 kernel 的
 边界就是这次全局同步(CUDA 里 grid 级同步的最便宜写法)。
 
-性能特征(EXP-T04,4090):32K 上下文 kernel 级 2.39× vs naive
+性能特征(EXP-T04（Flash-Decoding）,4090):32K 上下文 kernel 级 2.39× vs naive
 (0.147 vs 0.352 ms,单轮口径);GQA 原生读 KV(不物化 repeat)是另一半
 收益;llm-engine 接入后 fp32 probe PASS(5.96e-5)。
 """

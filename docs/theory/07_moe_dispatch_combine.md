@@ -1,6 +1,6 @@
 ---
 topic: MoE Permute/Unpermute 与 DeepEP 的 dispatch-combine
-status: 完成(实证=EXP-T07)
+status: 完成(实证=EXP-T07《MoE Permute/Unpermute》)
 ---
 
 # 07 · MoE 的搬运问题:单卡 permute ↔ 跨卡 all-to-all
@@ -20,7 +20,7 @@ gather;跨卡 EP 时同一代数变成 all-to-all——DeepEP 的 dispatch/combi
 - **unpermute 的反直觉设计**:直觉是 scatter-add(每个专家输出行加回
   原 token 位)→ 必须原子加;改成 **gather 式**(每个 token 自己去收
   topk 行加权求和)→ 无竞争、顺序确定(数值可复现!)。EPLB 一致性
-  实验(vllm/experiments#EXP-017)里"求和顺序改变→输出漂移"的教训,
+  实验(vllm/experiments#EXP-017《D5 EPLB gate》)里"求和顺序改变→输出漂移"的教训,
   在这里反向应用:选顺序确定的实现。
 - **对照 DeepEP**:dispatch = permute 的跨卡版(token 按目标专家所在
   rank 分桶 all-to-all);combine = unpermute 的跨卡版(部分结果收回
@@ -46,6 +46,6 @@ gather;跨卡 EP 时同一代数变成 all-to-all——DeepEP 的 dispatch/combi
 
 DeepEP README(dispatch/combine、SM 收发分工与 hook 式通信-计算重叠
 ——阶段三阅读的切入问题见 §2);vLLM 的 moe_align_block_size 专用
-kernel(vllm csrc/moe/);vllm/experiments#EXP-014(fused_moe 56.4%)
+kernel(vllm csrc/moe/);vllm/experiments#EXP-014《D1 MoE decode 分解》(fused_moe 56.4%)
 与 #EXP-017(求和顺序数值教训);本仓 `src/moe_permute.py` 与
 `scripts/test_moe_permute.py`。

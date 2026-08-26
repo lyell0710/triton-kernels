@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""EXP-T08:编译期资源探针——num_stages / BLOCK_N 与 shared memory 份数的映射。
+"""EXP-T08（num_stages 与 shared memory 份数的映射）:编译期资源探针——num_stages / BLOCK_N 与 shared memory 份数的映射。
 
 假设(跑前锁定):Triton 的 num_stages=N 会为喂给 tl.dot 的 load 分配 N 份
 片上缓冲,故 smem(N) = N × 单份 tile 字节。判定:读编译产物的

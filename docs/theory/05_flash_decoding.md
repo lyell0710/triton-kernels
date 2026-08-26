@@ -1,6 +1,6 @@
 ---
 topic: Flash-Decoding
-status: 完成(实证=EXP-T04)
+status: 完成(实证=EXP-T04《Flash-Decoding》)
 ---
 
 # 05 · Flash-Decoding:decode 的并行度从哪来
@@ -34,7 +34,7 @@ KV cache,曾把收益变负——kernel 快 ≠ 引擎快,拷贝藏在调用约�
 - **Q: 为什么不用 atomic 归并?** 部分量之间要按 m 重标定后才能加,
   原子加做不了非线性归并;两段式(或单 kernel + 跨 CTA 同步)是标准解。
 - **Q: 短上下文为什么不赢?** 两次 kernel launch 的固定成本(本机 ~90µs)
-  > 计算差;正解是 CUDA Graph(EXP-T05:launch 塌缩 11.6×)或 persistent
+  > 计算差;正解是 CUDA Graph(EXP-T05《CUDA Graph 消 launch 开销实测》:launch 塌缩 11.6×)或 persistent
   kernel。
 
 ## 5. 延伸(锚点)
@@ -43,4 +43,4 @@ Flash-Decoding 官方博客(Dao 等,2023,PyTorch blog);FA2 论文
 (2307.08691)§3(split 归并与 online softmax 同一代数);vLLM decode
 attention kernel(paged 读 + split 归并的合体;paged 衔接见
 vllm/experiments 白板图);本仓 `src/flash_decode.py`(partial/combine
-两 kernel)与 llm-engine 接线(llm-engine#EXP-D11/D14)。
+两 kernel)与 llm-engine 接线(llm-engine#EXP-D11《KV Cache 正确性》/D14)。

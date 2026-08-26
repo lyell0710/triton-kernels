@@ -1,6 +1,6 @@
 ---
 topic: FP8 GEMM(per-block scaling)与 Ada/Hopper 界线
-status: 完成(实证=EXP-T06)
+status: 完成(实证=EXP-T06《FP8 GEMM》)
 ---
 
 # 06 · FP8 GEMM:缩放代数与指令世代
@@ -25,7 +25,7 @@ scale)搬到 sm_89 的 mma 路线:fp8 e4m3 tl.dot + BLOCK_K=128 与缩放组
   | 搬运 | cp.async | TMA(张量批搬运) |
   | 细粒度缩放 | 累加器侧手乘 | wgmma 原生 scale 槽/CUDA core 累加 |
   DeepGEMM Hopper-only 的原因就是后两列;讲清这条界线=讲清"为什么
-  不能拿 DeepGEMM 直接跑 4090"。与 vllm/experiments#EXP-016 的
+  不能拿 DeepGEMM 直接跑 4090"。与 vllm/experiments#EXP-016《D4 FP8 vs W4A16 同卡对比》的
   oracle/fp8.py capability 分派(90/100 快路径跳过 89)同一事实的两面。
 
 ## 3. 本项目实证(EXP-T06)

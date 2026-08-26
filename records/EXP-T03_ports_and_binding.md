@@ -4,7 +4,7 @@
 | 日期 | 2026-08-23 | 环境 | 同 T01 | 状态 | 完成 |
 |---|---|---|---|---|---|
 关联:阶段一"RMSNorm/Softmax+INT8 移植 Triton"+"PyTorch 绑定";
-对照引用 Kernel_Optimazation#EXP-K01(4090 CUDA 数字)。
+对照引用 Kernel_Optimazation#EXP-K01《四 kernel 4090 重基准》(4090 CUDA 数字)。
 
 ## 1. 目的与假设
 移植三行核并回答"Triton vs CUDA 性能差在哪";绑定 CUDA v4 kernel 进

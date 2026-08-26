@@ -34,7 +34,7 @@ data/raw/EXP-T06/fp8_gemm_bench.json(provenance 首字段)。
 两假设成立。fp8 理论 2× 只兑现 1.5×:缩放乘法+fp32 累加占算力、fp8 mma
 配比打折(kperf 定界 compute-bound ~70% fp8 峰值;NCU 不可用)。
 Ada/Hopper 界线(mma+cp.async vs wgmma+TMA)= theory/06 表格,
-与 vllm/experiments#EXP-016 的 capability 分派互为表里。
+与 vllm/experiments#EXP-016《D4 FP8 vs W4A16 同卡对比》的 capability 分派互为表里。
 
 ## 7. 异常、偏差与开放问题
 tile 未扫全空间;激活量化融合(RMSNorm epilogue)未做;e5m2 路线未测;

@@ -14,7 +14,7 @@ dispatch-combine 代数,不同传输介质)。
   x (T,D) --permute(src_row)--> y (T*topk,D) --grouped GEMM(counts 给段界)-->
   y' (T*topk,D) --unpermute(pos, weights)--> out (T,D)
 
-性能特征(EXP-T07,T4096/D2048/E60/top4,4090):unpermute 0.0845±0.0001 ms
+性能特征(EXP-T07（MoE Permute/Unpermute）,T4096/D2048/E60/top4,4090):unpermute 0.0845±0.0001 ms
 vs torch 参考 1.053±0.002 = **12.5×**(来源=torch 路径四趟 kernel/中间张量
 收成单 kernel);permute 1.8×(0.081 vs 0.146);索引构建(torch argsort+
 bincount)0.266 ms——比两次数据搬运之和还贵,这就是 vLLM 为它写专用

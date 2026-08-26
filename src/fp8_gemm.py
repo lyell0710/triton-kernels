@@ -16,7 +16,7 @@ GEMM 主循环 BLOCK_K=128 与缩放组对齐:每组做一次 fp8 tl.dot(fp32 �
 Hopper-only(wgmma 异步矩阵指令 + TMA 搬运);sm_89(Ada)只有同步 mma 与
 cp.async,本实现即"mma 路线"——同一缩放代数,不同指令世代。
 
-性能特征(EXP-T06,4090):预量化孤立 GEMM 227.7/235.7 TFLOPS(4096³/
+性能特征(EXP-T06（FP8 GEMM）,4090):预量化孤立 GEMM 227.7/235.7 TFLOPS(4096³/
 8B up_proj)= 1.50×/1.52× vs fp16 cuBLAS 152.0/155.2(3 轮 228.1±1.3);
 kernel 精确性 1.9e-4(vs fp32 参考),量化端误差 3.6e-2 rel(量化本身的
 代价,与 kernel 无关)。反面口径:在线量化端到端只有 72.8/64.4 TFLOPS,

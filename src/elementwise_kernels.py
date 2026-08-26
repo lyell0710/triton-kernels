@@ -7,7 +7,7 @@
   tl.sum 一句生成同等规约树——你写的是"要什么",编译器写"怎么做"。
 - CUDA 的 float4 向量化访存 ≈ Triton 编译器对连续 tl.load 的自动向量化。
 - 代价:CUDA 能控制 bank conflict / 具体指令;Triton 控不了——性能差距
-  (若有)来自这里,见 EXP-T03 的同尺寸对比。
+  (若有)来自这里,见 EXP-T03（三件套移植 + torch 绑定）的同尺寸对比。
 
 性能特征——必须拆三个口径引用(EXP-T03/T05,4090):
 - 设备侧:softmax 8192² Triton 917 vs torch 921 GB/s,同速,双双贴
@@ -15,9 +15,9 @@
 - launch 层:1024² 的 4.4× "差距"全在主机侧(8×8 纯开销 37.4 vs 8.0µs,
   Triton Python 分发 > torch C++ 分发);终局解是 CUDA Graph:每调用
   36.2±0.1 → 3.11µs,**11.6×** 塌缩,graph 后 Triton 反超 torch eager
-  (EXP-T05);
+  (EXP-T05（CUDA Graph 消 launch 开销实测）);
 - 端到端:int8 三数字口径不得混引(LEDGER 红线)——5.9µs(裸 CUDA v4,
-  scale 预置,EXP-K01)/ 65.1µs(ext 绑定端到端,含 3 次前置 launch)/
+  scale 预置,EXP-K01（四 kernel 4090 重基准）)/ 65.1µs(ext 绑定端到端,含 3 次前置 launch)/
   41.6~52µs(本文件 triton 单 kernel 融合,随系统状态波动引用带区间);
   融合数(launch 数)比单 kernel 快慢更重要。
 """

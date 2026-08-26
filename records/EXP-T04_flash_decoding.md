@@ -3,7 +3,7 @@
 ## 0. 元信息
 | 日期 | 2026-08-24 | 环境 | v0.25.1-venv, RTX 4090 | 状态 | 完成 |
 |---|---|---|---|---|---|
-关联:EXP-T01 §7 backlog;llm-engine decode 路径接入。
+关联:EXP-T01《Triton FA2 forward》§7 backlog;llm-engine decode 路径接入。
 
 ## 1. 目的与假设
 Sq=1 时并行度改从 KV 维取(split-K 两段式:分段部分统计量 + online 归并)。

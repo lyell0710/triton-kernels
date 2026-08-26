@@ -14,7 +14,7 @@
 **用编译期资源探针把"2 级到底是不是双缓冲"这个前提问题查清楚了**——在本机的
 Triton 3.6 上,缓冲份数 = $\max(1, \text{num\_stages}-1)$,所以 `num_stages=2`
 **根本没有开出第二份缓冲**。"双缓冲只值 1%"这个读法是错的;正确读法是
-"那一档还不是双缓冲,真双缓冲是 stages=3,它值 +20%"(EXP-T08)。
+"那一档还不是双缓冲,真双缓冲是 stages=3,它值 +20%"(EXP-T08《num_stages 与 shared memory 份数的映射》)。
 
 读完你应当能:
 
@@ -22,7 +22,7 @@ Triton 3.6 上,缓冲份数 = $\max(1, \text{num\_stages}-1)$,所以 `num_stages
   $\mathrm{BM}\times\mathrm{BN}$ 的 tile 把算术强度抬到多少、以及为什么"抬到够用"
   这件事**单靠寄存器和 shared memory 做不到**,必须把 L2 和调度顺序也算进来。
 - 说清 `num_stages=N` 在 Triton 里到底生成了什么:文档承诺的是什么、编译产物实测
-  出来的是什么、两者为什么差 1、以及这个差 1 如何反过来解释 EXP-T02 那张表。
+  出来的是什么、两者为什么差 1、以及这个差 1 如何反过来解释 EXP-T02《流水线 GEMM》那张表。
 - 用 shared memory / 寄存器 / 每 SM CTA 数三条预算,算出"深度到几级会撞墙"、
   "为什么加深到 4 级并不额外压占用率"(与本仓旧说法相反,见 §3.4.3)。
 - 说清"打平 cuBLAS"的完整口径:**限两测形状 fp16、cuBLAS = torch.matmul dispatch
@@ -193,7 +193,7 @@ L2 复用距离从 $\mathrm{num\_pid\_n}$ 缩到 $\mathrm{GROUP\_M}$**(本仓 = 
    L2"这个前提**,换成权重远大于 L2 的形状,访存账要重算(推断,本仓未测该形状族)。
 2. 实测 0.8566 ms 对算力下界 0.832 ms 的比值是 1.029,即**这个 kernel 已经吃到
    roofline 算力边的 97%**,与 kperf 卡片"算力 98%"逐点吻合(终端级证据,登记于
-   EXP-T06 §7)。剩余空间不足 3%,这是本仓不再往下扫 BM/BN/BK 全空间的定量理由
+   EXP-T06《FP8 GEMM》§7)。剩余空间不足 3%,这是本仓不再往下扫 BM/BN/BK 全空间的定量理由
    (EXP-T02 §7 如实列为未做项)。
 
 上界那个 2.15 GB 还可以换一种算法核对(与上表独立):每 CTA 每轮载入
@@ -347,7 +347,7 @@ $$\text{shared} = \underbrace{\mathrm{BM}\times D\times2\,\mathrm{B}}_{Q\ \text{
 
 两条结论:
 
-1. **EXP-T01 那个"BN=128 撞 shared memory 上限(160 KB)OOM"被逐字复现**:
+1. **EXP-T01《Triton FA2 forward》那个"BN=128 撞 shared memory 上限(160 KB)OOM"被逐字复现**:
    163840 B = 160 KB,而 101376 B = 99 KB,正是 Ada Tuning Guide §1.4.1.1 的
    "The maximum shared memory per thread block is 99 KB"。**官方文档给的上限与
    编译器抛出的数字完全对上,这是本仓唯一一条严格闭合的"文档 → 实测"链。**

@@ -1,6 +1,6 @@
 ---
 topic: FlashAttention-2 forward
-status: 完成(实证=EXP-T01)
+status: 完成(实证=EXP-T01《Triton FA2 forward》)
 ---
 
 # 01 · FlashAttention:从"为什么慢"推到"为什么快"

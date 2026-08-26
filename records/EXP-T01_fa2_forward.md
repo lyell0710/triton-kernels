@@ -3,7 +3,7 @@
 ## 0. 元信息
 | 日期 | 2026-08-23 | 环境 | v0.25.1-venv(triton3.6/torch2.11), RTX 4090 | 状态 | 完成 |
 |---|---|---|---|---|---|
-关联:阶段一"Flash Attention Triton 简化版";llm-engine#EXP-D15 前置。
+关联:阶段一"Flash Attention Triton 简化版";llm-engine#EXP-D15《接入自研 Triton FA2》前置。
 
 ## 1. 目的与假设
 从零写 FA2 forward(causal+GQA),假设(跑前锁):6 形状 max abs err <2e-2
