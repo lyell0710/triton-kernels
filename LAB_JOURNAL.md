@@ -7,7 +7,7 @@
 - **关键数字**：FA2 88% of SDPA@4K；GEMM 162 TFLOPS 追平 cuBLAS（双缓冲 2 级仅 +1%，3 级 +19%——深度按延迟/计算比配）；launch 三层： 设备同速 917/922GB/s、分发 37/8/5.9µs、端到端融合反超（52 vs 65µs）。
 - **方法论**：排障三点法（纯开销尺寸/遮蔽尺寸/带宽尺寸）一次定位 launch 开销；mask 假设证伪照记（猜错也入档）。
 - **产物**：src 4 件、scripts 2 件、records T01-03、theory 01-03（五节全实证）、raw 3 组、README 红线表。
-- **下一步**：llm-engine EXP-D15《接入自研 Triton FA2》/D16 接入（本仓 fa2_forward 与 gemm_pipelined.linear 已按其 attention_impl/linear 契约留口）。
+- **下一步**：llm-engine llm-engine#EXP-D15《接入自研 Triton FA2》/D16 接入（本仓 fa2_forward 与 gemm_pipelined.linear 已按其 attention_impl/linear 契约留口）。
 ## §2 fp32 通道 + 引擎接入协同(2026-08-23 深夜)
 
 - **做了什么**：为 llm-engine 的 FP32 复跑 gate 打通 fp32 通道——dtype 自适应 tile（fp32 字节翻倍，BM128 超 Ada 100KB shared 上限，两次 OOM 实测后定 BM32/stages1）+ IEEE dot 开关（TF32 的 3e-3 → 6e-7）；linear 加小 M 自适应与混合策略支撑 D16。
@@ -62,7 +62,7 @@
 
 ## 2026-08-26 Triton 版 LLM 融合逐元素算子(EXP-T09)
 
-**做了什么**：新增 `src/llm_fused.py`，三个 kernel(fused_add_rmsnorm / rope / silu_and_mul)，作为姊妹仓 Kernel_Optimazation 三个手写 CUDA 算子的同协议对照臂。数字的权威在 Kernel#EXP-K05《LLM 融合逐元素算子三件套》（三种实现在同一 harness 下受测），本仓 records/EXP-T09 只登记 Triton 侧实现与踩坑。
+**做了什么**：新增 `src/llm_fused.py`，三个 kernel(fused_add_rmsnorm / rope / silu_and_mul)，作为姊妹仓 Kernel_Optimazation 三个手写 CUDA 算子的同协议对照臂。数字的权威在 Kernel_Optimazation#EXP-K05《LLM 融合逐元素算子三件套》（三种实现在同一 harness 下受测），本仓 records/EXP-T09 只登记 Triton 侧实现与踩坑。
 
 **为什么**：补上本项目「Triton vs CUDA」判断曲线的第三个点（访存主导融合逐元素）； 前两点是 GEMM（手写 CUDA 够到真 cuBLAS 85.6%）与 FA2（wmma 只够到自家 Triton 28%）。实现只放一份在本仓、由对方 bench import，避免两仓各存一份数字。
 

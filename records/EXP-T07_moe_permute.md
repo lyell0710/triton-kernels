@@ -29,7 +29,7 @@ data/raw/EXP-T07/moe_permute_bench.json。
 
 ## 6. 分析与结论
 - unpermute 12.5× 的来源=融合（torch 路径四趟 kernel/中间量 vs 单 kernel 一读一写）——theory/03 第三层的又一实例。
-- gather 式换掉 scatter-add：无原子、数值顺序确定（与 EXP-017《D5 EPLB gate》的重排数值教训呼应：能选顺序确定的实现就选）。
+- gather 式换掉 scatter-add：无原子、数值顺序确定（与 vllm/experiments#EXP-017《D5 EPLB gate》的重排数值教训呼应：能选顺序确定的实现就选）。
 - **索引构建成大头（0.27ms > 两次搬运之和）**——这就是 vLLM 给它写专用 CUDA kernel(moe_align_block_size)的实证理由；专用化 backlog。
 
 ## 7. 异常、偏差与开放问题
@@ -38,6 +38,6 @@ kernel 级 bench 未存逐轮 raw（json 存均值）；未做 padding 对齐 gr
 - backlog（2026-08-24 审计）：本记录/README 引用的关键数字为**单轮** bench，待 GPU 空闲补 ≥3 轮 stability（mean/std 落 stability 文件）。
 
 ## 8. 下游影响
-阶段二 MoE Permute 项闭环；与 EXP-014《D1 MoE decode 分解》(fused_moe 56.4%)拼成完整 "MoE 层内时间去哪了"图景。
+阶段二 MoE Permute 项闭环；与 vllm/experiments#EXP-014《D1 MoE decode 分解》(fused_moe 56.4%)拼成完整 "MoE 层内时间去哪了"图景。
 
 - **backlog 闭环（2026-08-24 晚）**:≥3 轮 stability 已补——unpermute 1.053±0.002 / 0.0845±0.0001 ms = 12.46×（12.5× 口径维持）。 raw = data/raw/EXP-T07/*_stability_r{1,2,3}.json，聚合 = data/derived/exp-t07_stability_3rounds.csv。

@@ -13,7 +13,7 @@ status: 完成(实证=EXP-T03《三件套移植 + torch 绑定》)
 
 ## 2. 机制(排障过程即讲解,EXP-T03 §7 的三步)
 
-1. **现象**：softmax 1024² Triton 36µs vs torch 8µs(4.4×);int8 quantize 更差。CUDA v4 同尺寸 5.9µs（EXP-K01《四 kernel 4090 重基准》）。
+1. **现象**：softmax 1024² Triton 36µs vs torch 8µs(4.4×);int8 quantize 更差。CUDA v4 同尺寸 5.9µs（Kernel_Optimazation#EXP-K01《四 kernel 4090 重基准》）。
 2. **假设一（证伪）**：掩码 load 阻断向量化 → 加"整除走无 mask 快路径"， 数字纹丝不动——**猜测要交给对照实验，哪怕猜错也要记录**。
 3. **假设二（坐实）**：尺寸三点法。8×8（纯开销）37.4µs ≈ 1024² 的 37.6µs → 时间根本不在 kernel 里；8192²（带宽主导）917 vs 922 GB/s 打平 → 设备侧没有差距。开销拆解：Triton 每次调用过 Python 包装（参数处理/JIT 缓存查找/grid 计算）+ wrapper 里的 empty 分配。
 
@@ -39,7 +39,7 @@ RMSNorm 顺带：vs pytorch_eager 1.8×/6.3×(2048×1024/4096)——eager 多 ke
 - **Q： 所以"Triton 比 CUDA 慢"对吗？** 在本仓测的行核与 GEMM 上，设备侧不对；成立的是"Triton 调用一次比 CUDA 扩展贵 ~25-60µs"。说清测的是 kernel 还是调用链，是这题的全部。
 - **Q： 生产里怎么消 launch 开销？** CUDA Graph 录制整个 decode step（launch 全部变 graph 节点重放）；torch.compile 的 kernel 融合； 或把小算子拼进邻居（RMSNorm 融进 GEMM 的 epilogue）。
 - **Q： 你的 CUDA v4 为什么裸跑 5.9µs 而 torch 层 65µs？** 65 = kernel 5.9
-  + scale 的 3 个 torch kernel + 4 次分发；裸 bench 的 scale 是预先算好传入的（EXP-K01 口径注明）——对照物口径差异本身要摆上台面。
+  + scale 的 3 个 torch kernel + 4 次分发；裸 bench 的 scale 是预先算好传入的（Kernel_Optimazation#EXP-K01 口径注明）——对照物口径差异本身要摆上台面。
 
 ## 5. 延伸(锚点)
 

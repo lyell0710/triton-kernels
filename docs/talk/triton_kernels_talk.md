@@ -22,7 +22,7 @@
 
 ## 3. Triton vs CUDA(EXP-T03)——永远分三口径
 
-讲法：「这题不能裸答快慢，要分三层：①设备侧：8192² softmax 917 vs 922 GB/s，**同速**（双双贴 roofline 91%）；②launch：同一 1024² softmax Triton 37.6 vs torch 8.1 µs，而 8×8 纯开销 37.4≈37.6，证明时间不在 kernel 里；裸 CUDA 扩展量级 ~5.9µs（int8 v4，EXP-K01《四 kernel 4090 重基准》，scale 预置口径）； ③端到端：Triton 单 kernel 融合 51.7µs 反超 "更快的 CUDA kernel + 3 次前置 launch" 的 65.1µs——融合数比单核快慢更重要。」
+讲法：「这题不能裸答快慢，要分三层：①设备侧：8192² softmax 917 vs 922 GB/s，**同速**（双双贴 roofline 91%）；②launch：同一 1024² softmax Triton 37.6 vs torch 8.1 µs，而 8×8 纯开销 37.4≈37.6，证明时间不在 kernel 里；裸 CUDA 扩展量级 ~5.9µs（int8 v4，Kernel_Optimazation#EXP-K01《四 kernel 4090 重基准》，scale 预置口径）； ③端到端：Triton 单 kernel 融合 51.7µs 反超 "更快的 CUDA kernel + 3 次前置 launch" 的 65.1µs——融合数比单核快慢更重要。」
 - int8 三数字（5.9 裸 / 65.1 ext / 51.7 融合）口径不得混引（红线表）； 融合数字跨会话波动 41.6~52µs，引用带区间（EXP-T03《三件套移植 + torch 绑定》§7）。
 - 第四层（EXP-T05《CUDA Graph 消 launch 开销实测》）：CUDA Graph 把 launch 塌缩 **11.6×**（36.8→3.1µs /调用），graph 后 Triton 反超 torch eager——"Triton 小核慢"的正解是上 Graph，不是换 CUDA。
 

@@ -186,7 +186,7 @@ $\max$ 模型是**稳态**下的结论，而一个长度为 N 的循环并不是
 
 - **ext-CUDA 路径**：复用 Kernel_Optimazation 的 `quantize_v4` CUDA kernel（零改动）， 用 torch extension 绑进来。但 v4 的签名要求 **scale 预置**，所以 scale 只能在绑定层用 torch 算——`(std::get<0>(x.abs().max(1)) / 127.0f).clamp_min(1e-8f)` 这**一行** 展开就是 abs → max → div 三次独立 kernel launch，加上 v4 本身共 4 次（src/torch_ext/int8_binding.cpp：26-32）。端到端 **65.1 µs**。
 - **Triton 融合路径**：absmax 规约、缩放、舍入、写回 scale **一趟做完**， **1 次 launch**(src/elementwise_kernels.py：91-113)。端到端 **51.7 µs**。
-- **裸 kernel 口径**：同一个 v4 kernel 单独 bench 只有 **5.9 µs**（EXP-K01《四 kernel 4090 重基准》，口径 = scale 预置，不含 torch 封装）。
+- **裸 kernel 口径**：同一个 v4 kernel 单独 bench 只有 **5.9 µs**（Kernel_Optimazation#EXP-K01《四 kernel 4090 重基准》，口径 = scale 预置，不含 torch 封装）。
 
 **"更快的 kernel 输掉端到端"**：v4 本体比 Triton 版快一个量级，端到端却输 13.4 µs。账要这么算（不能简单地"3 × 8 µs = 24 µs"）：Triton 路径 ≈ 1 次贵分发 + 1 次设备本体； ext 路径 ≈ 4 次便宜分发 + 4 次设备本体（其中三个是极小的规约 kernel，设备时间可忽略但每个都要付一次分发）+ pybind 与张量校验。两条路各有各的贵法，而融合把**次数**这一项压到 1。所以本仓的结论句是：**在 torch 集成层，融合数（launch 数）比单 kernel 的快慢更重要。**
 
@@ -224,7 +224,7 @@ $\max$ 模型是**稳态**下的结论，而一个长度为 N 的循环并不是
 
 | 路径 | launch 数 | 输入读 | 中间量往返 | 输出写 | 实测端到端 |
 |---|---|---|---|---|---|
-| 裸 CUDA v4（scale 预置） | 1 | 4.19 MB | 0 | 1.05 MB(int8) | **5.9 µs**（EXP-K01，不含封装） |
+| 裸 CUDA v4（scale 预置） | 1 | 4.19 MB | 0 | 1.05 MB(int8) | **5.9 µs**（Kernel_Optimazation#EXP-K01，不含封装） |
 | ext 绑定端到端 | 4 | 4.19 MB ×2（scale 那趟再读一遍） | abs 的中间张量 4.19 MB 写 + 读 | 1.05 MB | **65.1 µs**（单轮） |
 | Triton 融合 | 1 | 4.19 MB | 0 | 1.05 MB + scale | **51.7 µs**（单轮，跨会话 41.6~52） |
 
@@ -604,7 +604,7 @@ figures/fig3_launch_cudagraph.png（脚本 scripts/plot_readme_figures.py:122-14
 | int8q 端到端（torch 层） | **51.7 µs**(1 launch) | ext-CUDA v4 65.1(4 launch) | 融合 > 单核快慢 |
 | int8q 裸 bench |— | CUDA v4 5.9 µs | 不含封装的下限 |
 
-三条读法纪律：①前两行是**终端级证据**（排障会话），存盘 raw 的同尺寸值是 36.83/7.84 µs； ②第三行的 917/921 是 EXP-T03 §5 的现行口径，按 536.9 MB / 0.585 ms 复算即得同一量级； ③第四行两个数**仍为单轮**，措辞约定明确要求对外引用时带"单轮"。第五行的 5.9 µs 来自另一个仓的实测（EXP-K01）且口径是 **scale 预置**——它和第四行的 65.1 **不是同一件事的两次测量**，是两个口径，混引就是造假。
+三条读法纪律：①前两行是**终端级证据**（排障会话），存盘 raw 的同尺寸值是 36.83/7.84 µs； ②第三行的 917/921 是 EXP-T03 §5 的现行口径，按 536.9 MB / 0.585 ms 复算即得同一量级； ③第四行两个数**仍为单轮**，措辞约定明确要求对外引用时带"单轮"。第五行的 5.9 µs 来自另一个仓的实测（Kernel_Optimazation#EXP-K01）且口径是 **scale 预置**——它和第四行的 65.1 **不是同一件事的两次测量**，是两个口径，混引就是造假。
 
 **给这张表补一列"轮数"，是最省事的防误引措施**：
 
@@ -652,7 +652,7 @@ figures/fig3_launch_cudagraph.png（脚本 scripts/plot_readme_figures.py:122-14
 2. **Q：三点法为什么能证明"时间不在 kernel 里"？** 它是一个极限夹逼：8×8 把 $T_{\text{dev}}\to0$，测到的 37.4 µs 只能是主机侧； 8192² 把 $T_{\text{dev}}$ 拉到远大于主机侧，两边打平；1024² 的 37.6 µs 与 37.4 相差不到 1%，落在主机侧那一端（§3.2.1）。**只用了一个 $\max$ 模型，没有额外假设。**
 3. **Q：有没有第四个点？** 有，而且是事后才发现的：1024×1500 的数据量比 1024×1024 多 46%，时间在 3 轮口径下不可区分（0.4σ，§3.2.3）。它同时也复核了那个被证伪的 mask 假设。
 4. **Q：Triton 的 launch 为什么比 torch 贵？** 每次调用要过 Python 包装：reshape/contiguous、输出分配、`next_power_of_2` 之类的编译期常量推导、JIT 缓存查找、grid 计算（第 2 段的 8 行代码）。**本仓没有逐行 profiling，"主要在 JIT 缓存查找与驱动 launch"是推断。**
-5. **Q：int8 那三个数字分别是什么？** 5.9 µs = 裸 CUDA v4（scale 预置，EXP-K01）；65.1 µs = ext 绑定端到端（4 次 launch）； 51.7 µs = Triton 单 kernel 融合（跨会话 41.6~52 µs）。三口径不得混引，后两个仍为单轮。
+5. **Q：int8 那三个数字分别是什么？** 5.9 µs = 裸 CUDA v4（scale 预置，Kernel_Optimazation#EXP-K01）；65.1 µs = ext 绑定端到端（4 次 launch）； 51.7 µs = Triton 单 kernel 融合（跨会话 41.6~52 µs）。三口径不得混引，后两个仍为单轮。
 6. **Q：为什么"更快的 kernel"会输？** 因为 v4 的签名要求 scale 预置，绑定层那一行 `x.abs().max(1)/127` 展开成三次 torch launch（第 5 段）。融合把次数压到 1，省的是分发次数与中间量往返两笔（§3.3.3）。更一般的教训是：**接口契约决定它周围要长出多少胶水。**
 7. **Q：融合省的两笔账，哪笔更大？** 看尺寸。本仓 1024² 上 launch 那笔约 24 µs、中间量那笔约 16 µs 量级，同阶但未隔离（§3.3.3）；Ivanov 等人在 BERT 训练上省的主要是中间量（算子够大，launch 不是瓶颈）。 **同一个动作在不同尺寸上兑现的是不同的账。**
 8. **Q：CUDA Graph 消掉的到底是什么？** 每次调用的主机侧分发——录成图后由驱动一次性提交（CUDA 文档：开销"paid once for the entire graph during instantiation"）。实测消掉约 33 µs/调用，恰好等于 §3.2.1 估的 Triton 分发段（§5.1 的机理账）。

@@ -14,7 +14,7 @@
 
 ## 1 目的与假设
 
-为姊妹仓 Kernel_Optimazation 的三个手写 CUDA 算子提供同协议的 Triton 对照臂， 补上本项目「什么时候该用 CUDA」判断曲线的第三个点：**访存主导的融合逐元素算子**。前两点已有：计算主导 GEMM 手写够到真 cuBLAS 85.6%（Kernel#EXP-K02《CUDA Tensor Core GEMM 版本梯》）； 融合型 attention 的 wmma 版只够到自家 Triton 28%（Kernel#EXP-K03《CUDA FA2 forward 简化版版本梯》）。
+为姊妹仓 Kernel_Optimazation 的三个手写 CUDA 算子提供同协议的 Triton 对照臂， 补上本项目「什么时候该用 CUDA」判断曲线的第三个点：**访存主导的融合逐元素算子**。前两点已有：计算主导 GEMM 手写够到真 cuBLAS 85.6%（Kernel_Optimazation#EXP-K02《CUDA Tensor Core GEMM 版本梯》）； 融合型 attention 的 wmma 版只够到自家 Triton 28%（Kernel_Optimazation#EXP-K03《CUDA FA2 forward 简化版版本梯》）。
 
 假设：本类算子上 Triton 与手写 CUDA 在 HBM 区间打平（±5%），因为两者撞同一堵带宽墙。
 
@@ -40,7 +40,7 @@ HBM 区间（3 轮 mean，GB/s，占 4090 的 1008 峰值%）：
 | rope | 898.5 (89.1%) | 905.9 (89.9%) | 877.2 (87.0%) |
 | silu_and_mul | 928.0 (92.1%) | 927.7 (92.0%) | 925.7 (91.8%) |
 
-L2 常驻与 decode 区间 Triton 明显落后（手写快 1.7-2.9x / 5-6x），明细见 EXP-K05 §5。
+L2 常驻与 decode 区间 Triton 明显落后（手写快 1.7-2.9x / 5-6x），明细见 Kernel_Optimazation#EXP-K05 §5。
 
 ## 6 分析与结论
 
@@ -66,5 +66,5 @@ Triton 在这类算子上有一处结构优势值得记：**手写 CUDA 需要�
 
 ## 8 下游影响
 
-- `src/llm_fused.py` 已被 llm-engine 作为 `LLME_FUSED=triton` 后端接入（EXP-D23：TTFT -20.5%、TPOT -20.8%）。
+- `src/llm_fused.py` 已被 llm-engine 作为 `LLME_FUSED=triton` 后端接入（llm-engine#EXP-D23：TTFT -20.5%、TPOT -20.8%）。
 - 本项目「Triton vs CUDA」的结论从两点扩为三点曲线；HBM 区间的"打平"结论为**同 harness 实测级**，可去掉推断级限定。
