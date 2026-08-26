@@ -138,3 +138,31 @@
   docs/lectures/03_launch_fusion_graph.md(486 行,97 行)、README.md、LAB_JOURNAL.md 本节。
 - **下一步**:讲义引用的 21 段代码已逐字校验行号;若 src/ 再改注释需同步复核行号。
   仓内仍无远端,待用户建 GitHub repo 后 push。
+
+## 2026-08-26 Triton 版 LLM 融合逐元素算子(EXP-T09)
+
+**做了什么**:新增 `src/llm_fused.py`,三个 kernel(fused_add_rmsnorm / rope /
+silu_and_mul),作为姊妹仓 Kernel_Optimazation 三个手写 CUDA 算子的同协议对照臂。
+数字的权威在 Kernel#EXP-K05(三种实现在同一 harness 下受测),本仓 records/EXP-T09
+只登记 Triton 侧实现与踩坑。
+
+**为什么**:补上本项目「Triton vs CUDA」判断曲线的第三个点(访存主导融合逐元素);
+前两点是 GEMM(手写 CUDA 够到真 cuBLAS 85.6%)与 FA2(wmma 只够到自家 Triton 28%)。
+实现只放一份在本仓、由对方 bench import,避免两仓各存一份数字。
+
+**关键数字**:HBM 区间 922.1 / 898.5 / 928.0 GB/s(91.5% / 89.1% / 92.1% 峰值),
+与手写 CUDA 两两差 <2%,假设成立。L2 与 decode 区间落后(手写快 1.7–2.9x / 5–6x),
+归因分别为线程配置控制粒度与 Python 分发开销(后者与 EXP-T03 的 ~30us 一致)。
+
+**产物路径**:`src/llm_fused.py`、`records/EXP-T09_llm_fused_elementwise.md`;
+已被 llm-engine 作为 `LLME_FUSED=triton` 后端接入(EXP-D23,TTFT -20.5%)。
+
+**踩坑(rope 粒度试错三轮,值得复刻的诊断路径)**:①一 program 一 (token,head) →
+100 万 program,调度开销吃掉一半;②一 program 一 token + 二维 tile → 行跨度 D,
+访存拆成半事务;③q/k 合进一个 kernel 用 mask 选 → 有效带宽恰好减半,说明
+**Triton 的 mask 保证语义正确、不保证被 mask 掉的那路不发事务**。
+另有一次假警报:测出「恰好慢 2 倍」,换粒度与加 tl.max_contiguous 都无效,
+dump PTX 看到 ld.global.v4.b32 证明向量化没问题,单独测该 kernel 得 907 GB/s,
+最后查出是对方 bench 把 clone 写进了计时闭包。
+
+**下一步**:三个 kernel 未做 autotune(仅 rope 扫过一次);可选。
