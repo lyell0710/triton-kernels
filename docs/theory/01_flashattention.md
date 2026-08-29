@@ -15,7 +15,7 @@ status: 完成(实证=EXP-T01《Triton FA2 forward》)
 
 **第 1 步 · softmax 为什么"看似不能分块"**：softmax(x)_i = e^{x_i}/Σe^{x_j} 需要**整行**的 max（数值稳定）和 sum。K 分块后每块只算出行的一段， max/sum 都不完整。
 
-**第 2 步 · online softmax（核心恒等式）**：维护跑动 max m 和跑动和 l。新块进来，新 max m' = max(m， max（块）)；旧的部分和用系数 α = e^{m−m'} 一乘就换到新基准：l' = α·l + Σe^{x_new−m'}。关键：**输出累加器 acc 同样可以被 α 修正**(acc' = α·acc + P_new·V_new)， 所以连"最后再除 l"都能推迟到全部块流完——一遍循环出最终结果。（本仓 kernel 第 69-75 行就是这五行数学。）
+**第 2 步 · online softmax（核心恒等式）**：维护跑动 max m 和跑动和 l。新块进来，新 max m' = max（m， max（块））；旧的部分和用系数 α = e^{m−m'} 一乘就换到新基准：l' = α·l + Σe^{x_new−m'}。关键：**输出累加器 acc 同样可以被 α 修正**(acc' = α·acc + P_new·V_new)， 所以连"最后再除 l"都能推迟到全部块流完——一遍循环出最终结果。（本仓 kernel 第 69-75 行就是这五行数学。）
 
 **第 3 步 · FA1→FA2 改了什么**（面试高频）：
 - 循环反转：FA1 外层 K/V 内层 Q（每个 K 块要读写所有 Q 块的 m/l/acc 到 HBM）；FA2 外层 Q 内层 K/V——**m/l/acc 常驻寄存器**，零中间落存。

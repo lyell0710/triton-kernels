@@ -78,7 +78,7 @@
 
 ### 2.1 一次 kernel 调用到底花在哪
 
-成本分两段——**主机侧**（Python/C++ 分发、参数处理、JIT 缓存查找、grid 计算、 wrapper 里的临时张量分配）与**设备侧**（kernel 本体执行）。在一个不做同步的循环里连续发射时，两段是**流水并行**的：主机在为第 $i+1$ 次调用做准备，设备还在跑第 $i$ 次。于是 $$T_{\text{每调用}} \approx \max（T_{\text{主机}}，\ T_{\text{设备}}）$$ 不是相加。这个 $\max$ 就是全篇的第一性原理：**你测到的数字，只反映两者中更大的那个。**
+成本分两段——**主机侧**（Python/C++ 分发、参数处理、JIT 缓存查找、grid 计算、 wrapper 里的临时张量分配）与**设备侧**（kernel 本体执行）。在一个不做同步的循环里连续发射时，两段是**流水并行**的：主机在为第 $i+1$ 次调用做准备，设备还在跑第 $i$ 次。于是 $$T_{\text{每调用}} \approx \max(T_{\text{主机}},\ T_{\text{设备}})$$ 不是相加。这个 $\max$ 就是全篇的第一性原理：**你测到的数字，只反映两者中更大的那个。**
 
 **这个 $\max$ 凭什么成立**，要能说出硬件与软件两层理由（本讲义推导）：
 
@@ -97,11 +97,11 @@
 $\max$ 模型是**稳态**下的结论，而一个长度为 N 的循环并不是从稳态开始的。把它写细（本讲义推导）：
 
 - 第 1 次调用：主机做完准备后提交，设备开始执行。这一刻设备是空的，所以这一次的时间是 $T_{\text{host}} + T_{\text{dev}}$（相加，不是取大）。
-- 第 2 次起：主机在准备第 $i+1$ 次时，设备正在跑第 $i$ 次，进入稳态，每次 $\max(T_{\text{host}}， T_{\text{dev}})$。
+- 第 2 次起：主机在准备第 $i+1$ 次时，设备正在跑第 $i$ 次，进入稳态，每次 $\max(T_{\text{host}}, T_{\text{dev}})$。
 - 最后一次：主机已经提交完，但要等设备排空，末尾补一个 $T_{\text{dev}}$。
 
 于是 $$T_{\text{total}} \approx N\cdot\max(T_{\text{host}}, T_{\text{dev}})
-+ \min(T_{\text{host}}， T_{\text{dev}})$$ 除以 N 得到的每调用值与稳态值的相对偏差是 $\min/(N\cdot\max) \le 1/N$。 **N=100 时这个偏差 ≤ 1%，小于本仓最不稳那一格的轮间 std(9.17%)**——所以 N=100 是够的，而 N=1 完全不够（那时测的是 $T_{\text{host}}+T_{\text{dev}}$，是另一个量）。
++ \min(T_{\text{host}}, T_{\text{dev}})$$ 除以 N 得到的每调用值与稳态值的相对偏差是 $\min/(N\cdot\max) \le 1/N$。 **N=100 时这个偏差 ≤ 1%，小于本仓最不稳那一格的轮间 std(9.17%)**——所以 N=100 是够的，而 N=1 完全不够（那时测的是 $T_{\text{host}}+T_{\text{dev}}$，是另一个量）。
 
 这条推导还顺手解释了 `wall()` 里 `wu=10` 次 warmup 为什么必要（§4 第 6 段）： 它不只是"让缓存热起来"，更是**把首次调用那笔 $T_{\text{host}}+T_{\text{dev}}$ 以及 JIT 编译、分配器首次分配全部挪到计时区间之外**。
 
@@ -115,7 +115,7 @@ $\max$ 模型是**稳态**下的结论，而一个长度为 N 的循环并不是
 
 ### 3.1 第一层:带宽主导尺寸下,设备侧同速
 
-先把设备侧单独看清楚。8192×8192 fp32 的行 softmax，一次读一次写： $$2 \times 8192^2 \times 4\，\mathrm{B} = 536.9\ \mathrm{MB}$$ 存盘 raw(data/raw/EXP-T02/ew_gemm_bench.json)里 Triton 0.58497 ms、torch 0.58252 ms， 换算即 **0.92 TB/s 量级**；仓内现行口径记 **917 / 921 GB/s**（EXP-T03《三件套移植 + torch 绑定》§5），对 4090 的 1008 GB/s roofline 是 **91%**，与 kperf 卡片"带宽 91%、occ 67%（regs 限）"一致（终端级证据，登记于 EXP-T06《FP8 GEMM》§7）。
+先把设备侧单独看清楚。8192×8192 fp32 的行 softmax，一次读一次写： $$2 \times 8192^2 \times 4\,\mathrm{B} = 536.9\ \mathrm{MB}$$ 存盘 raw(data/raw/EXP-T02/ew_gemm_bench.json)里 Triton 0.58497 ms、torch 0.58252 ms， 换算即 **0.92 TB/s 量级**；仓内现行口径记 **917 / 921 GB/s**（EXP-T03《三件套移植 + torch 绑定》§5），对 4090 的 1008 GB/s roofline 是 **91%**，与 kperf 卡片"带宽 91%、occ 67%（regs 限）"一致（终端级证据，登记于 EXP-T06《FP8 GEMM》§7）。
 
 3 轮口径同样贴合：0.584433±0.000843 ms(Triton)与 0.582353±0.000179 ms(torch)， 折算 918.7 / 921.9 GB/s（data/derived/exp-t02_stability_3rounds.csv，本讲义按同一字节数折算）。**两个口径给同一结论，轮间 std 都在 0.15% 以内——设备侧的数字是稳的。** 记住这句话，§5.1 会用它的反面（主机侧数字很飘）来做一次归因。
 
@@ -145,7 +145,7 @@ $\max$ 模型是**稳态**下的结论，而一个长度为 N 的循环并不是
 
 #### 3.2.2 交叉点在哪:一个可以先算再测的量(本讲义推导)
 
-既然 $T_{\text{每调用}} = \max(T_{\text{host}}， T_{\text{dev}})$，那么"该不该上 Graph" 就等价于问"我的 $T_{\text{dev}}$ 有没有超过那条地板"。对带宽主导的行核： $$T_{\text{dev}} \approx \frac{\text{读写字节}}{\pi_{\text{mem}}}$$ 令它等于 Triton 的地板 $36.2\，\mu s$： $$\text{读写字节} = 36.2\times10^{-6}\times1008\times10^{9} \approx 36.5\ \mathrm{MB}$$ 对 fp32 一读一写的方阵，$8n^2 = 36.5\，\mathrm{MB} \Rightarrow n \approx 2136$。
+既然 $T_{\text{每调用}} = \max(T_{\text{host}}, T_{\text{dev}})$，那么"该不该上 Graph" 就等价于问"我的 $T_{\text{dev}}$ 有没有超过那条地板"。对带宽主导的行核： $$T_{\text{dev}} \approx \frac{\text{读写字节}}{\pi_{\text{mem}}}$$ 令它等于 Triton 的地板 $36.2\,\mu s$： $$\text{读写字节} = 36.2\times10^{-6}\times1008\times10^{9} \approx 36.5\ \mathrm{MB}$$ 对 fp32 一读一写的方阵，$8n^2 = 36.5\,\mathrm{MB} \Rightarrow n \approx 2136$。
 
 **结论**：本仓这类行核在约 $2048^2$ fp32 以下，时间由主机侧地板决定；以上才由设备侧决定。对照实测：$1024^2$(8.39 MB)确实是主机侧主导，$8192^2$(536.9 MB)确实是设备侧主导，而 $2048^2$ 这个交叉点附近**本仓没有测过**。这条预测是可证伪的，验证成本是往 scripts/test_ew_gemm.py 的形状列表里加一行（§8.3 列为待办）。
 
@@ -160,7 +160,7 @@ $\max$ 模型是**稳态**下的结论，而一个长度为 N 的循环并不是
 | 1024×1024 | 1.00 | 36.33±0.44 | 8.24±0.36 |
 | 1024×1500 | **1.46** | 36.11±0.35 | 8.45±0.30 |
 
-**数据量多了 46%，时间一点没变**（Triton 侧差值 −0.22 µs，合并 σ = 0.56，即 0.4σ， 不显著）。按 §3.2.2 的算式，1024×1500 fp32 一读一写是 12.29 MB，设备侧下限 $12.2\，\mu s$，仍远低于 36 µs 的地板——**所以时间不变正是模型的预言**。
+**数据量多了 46%，时间一点没变**（Triton 侧差值 −0.22 µs，合并 σ = 0.56，即 0.4σ， 不显著）。按 §3.2.2 的算式，1024×1500 fp32 一读一写是 12.29 MB，设备侧下限 $12.2\,\mu s$，仍远低于 36 µs 的地板——**所以时间不变正是模型的预言**。
 
 这个点还顺手证伪了另一件事：1024×1024 走的是 `EXACT` 无 mask 快路径，1024×1500 走的是带 mask 的慢路径（§4 第 1 段），**两条路径的时间在 3 轮口径下不可区分**。这就是 §3.2.4 那个假设的独立复核。
 
@@ -210,9 +210,9 @@ $\max$ 模型是**稳态**下的结论，而一个长度为 N 的循环并不是
 融合同时省两件事，必须分开算：
 
 1. **省 launch**：少 3 次 torch 分发，按 §3.2.1 的 ~8 µs/次，约 24 µs。
-2. **省中间量往返**：eager 链里 `x.abs()` 要写一份 1024² fp32 = 4.19 MB 的中间张量再读回来，`x / scale` 又是一份。按 1008 GB/s，每份中间量的写+读是 $2\times4.19\，\mathrm{MB}/1008\，\mathrm{GB/s} = 8.3\，\mu s$。
+2. **省中间量往返**：eager 链里 `x.abs()` 要写一份 1024² fp32 = 4.19 MB 的中间张量再读回来，`x / scale` 又是一份。按 1008 GB/s，每份中间量的写+读是 $2\times4.19\,\mathrm{MB}/1008\,\mathrm{GB/s} = 8.3\,\mu s$。
 
-两笔加起来的量级（$24 + \sim16$）与实测差（$99.70 - 42.16 = 57.5\，\mu s$）同阶， 但**对不上小数点**——本仓没有逐算子拆分 eager 路径的 launch 数与中间量数， 所以这只是一个量级核对，不是归因。诚实的表述是：**两笔都在起作用，配比未隔离。**
+两笔加起来的量级（$24 + \sim16$）与实测差（$99.70 - 42.16 = 57.5\,\mu s$）同阶， 但**对不上小数点**——本仓没有逐算子拆分 eager 路径的 launch 数与中间量数， 所以这只是一个量级核对，不是归因。诚实的表述是：**两笔都在起作用，配比未隔离。**
 
 这个结构与 Ivanov 等人的 "Data Movement Is All You Need"(arXiv:2007.00072)诊断的是同一件事。他们对 BERT 训练做算子分类后写道："While tensor contractions account for over 99% of the arithmetic operations performed, they constitute only 61% of the runtime. Over a third (37%) of the runtime in a BERT training iteration is spent in memory-bound operators."并给出方向："fusion is a major opportunity for promoting data reuse, as when operators cover identical iteration spaces, global memory writes and subsequent reads between them can be removed."他们据此把 BERT encoder layer 提速 1.30×、整个 BERT 提速 1.19×，数据移动减少最多 22.91%。
 
@@ -675,7 +675,7 @@ figures/fig3_launch_cudagraph.png（脚本 scripts/plot_readme_figures.py:122-14
 | 4 | PyTorch 文档：捕获四条约束（非默认流、无 CPU 同步、地址不变、先预热） | scripts/test_cudagraph.py：27-35 逐条实现 | 一致。**第三条("Every replay reads from and writes to the same (virtual) memory addresses")同时是 3.11 µs 那个 L2 红利的来源**——约束与偏差是同一件事的两面 |
 | 5 | PyTorch 文档：graph "sacrifices the dynamic flexibility of typical eager execution in exchange for greatly reduced CPU overhead" | 本仓只测了 "reduced CPU overhead" 那一半 | 本仓**没有量化 "sacrificed flexibility" 的代价**（分桶捕获的显存与捕获时间）。vLLM 的做法是这条代价的工程形态，本仓只做了单算子最小样本 |
 | 6 | vLLM 文档：按一组 batch size 捕图，运行时选不小于当前 batch 的最小那张并 padding，落空则退回 eager | 本仓只录了单个算子的 100 次调用 | **同一机理的最小样本 vs 生产形态**。本仓的缺口是 KV cache 静态化（EXP-T05 §7），不是机制理解 |
-| 7 | Ivanov 等 arXiv：2007.00072：BERT 训练里 "tensor contractions account for over 99% of the arithmetic operations ... only 61% of the runtime"；"37% of the runtime ... memory-bound operators"；融合后 encoder layer 1.30×、整个 BERT 1.19×、数据移动减少最多 22.91% | 本仓 1024² int8 quantize：融合 42.16±0.35 vs eager 99.70±1.74 µs（3 轮） | **同一结论方向，不同瓶颈构成**：论文的负载里 launch 不是瓶颈（算子足够大），省的主要是中间量往返；本仓在这个尺寸上 launch 占比更大（§3.3.3）。**倍数不可比，机制可比** |
+| 7 | Ivanov 等 arXiv:2007.00072：BERT 训练里 "tensor contractions account for over 99% of the arithmetic operations ... only 61% of the runtime"；"37% of the runtime ... memory-bound operators"；融合后 encoder layer 1.30×、整个 BERT 1.19×、数据移动减少最多 22.91% | 本仓 1024² int8 quantize：融合 42.16±0.35 vs eager 99.70±1.74 µs（3 轮） | **同一结论方向，不同瓶颈构成**：论文的负载里 launch 不是瓶颈（算子足够大），省的主要是中间量往返；本仓在这个尺寸上 launch 占比更大（§3.3.3）。**倍数不可比，机制可比** |
 | 8 | NVIDIA GPU Performance Background User's Guide §4：三个限制因子 "memory bandwidth， math bandwidth and latency" | 本仓四层拆解里的"设备侧"对应前两个，"主机侧"**不在这三个之内** | **这是官方模型的一个盲区**：它描述的是设备内部的限制因子，而本篇一半的内容（主机侧分发）发生在设备之外。**把设备侧性能模型套到 launch 主导的场景上，会得不到任何解释** |
 | 9 | Ada 白皮书 Table 2：L2 Cache Size 73728 KB | 本仓 3.11 µs 反推出 2.7 TB/s 的等效带宽，4.19 MB 输入只占 L2 的 5.7% | **容量对得上，带宽未核实**。本仓没有测 4090 的 L2 实际带宽，只能断言"超过 HBM 峰值 2.7 倍，故必然主要来自片上" |
 | 10 | Triton 文档：kernel 参数版 num_stages "only pipelines loads that feed into `dot` operations" | 本仓行核里**没有 `dot`**，所以 num_stages 对它们无效 | 一致且值得点出：讲义 02 那套流水结论**不适用于本篇的行核**。同一个仓里两类 kernel 的调优旋钮不同，混用会白忙 |
@@ -705,7 +705,7 @@ figures/fig3_launch_cudagraph.png（脚本 scripts/plot_readme_figures.py:122-14
 
 **论文**
 
-1. Ivanov， Dryden， Ben-Nun， Li， Hoefler， "Data Movement Is All You Need： A Case Study on Optimizing Transformers"， arXiv：2007.00072，算子分类与 Table 1、融合一节。——想知道"transformer 里到底有多少时间花在非矩阵乘算子上"（99% 的 FLOP 只占 61% 的时间，37% 在访存受限算子里）以及"融合为什么是主要机会"， 读这两处；也是把本仓 1024² 的小样本放进真实负载语境的最好参照。
+1. Ivanov， Dryden， Ben-Nun， Li， Hoefler， "Data Movement Is All You Need： A Case Study on Optimizing Transformers"， arXiv:2007.00072，算子分类与 Table 1、融合一节。——想知道"transformer 里到底有多少时间花在非矩阵乘算子上"（99% 的 FLOP 只占 61% 的时间，37% 在访存受限算子里）以及"融合为什么是主要机会"， 读这两处；也是把本仓 1024² 的小样本放进真实负载语境的最好参照。
 2. Williams, Waterman & Patterson, "Roofline: an insightful visual performance model for multicore architectures", CACM 52(4):65-76, DOI:10.1145/1498765.1498785。——§3.1 里"两边都贴 roofline 就说明 kernel 没差距"这条推理的框架来源。
 
 **官方文档**

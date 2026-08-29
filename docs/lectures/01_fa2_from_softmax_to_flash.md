@@ -39,14 +39,14 @@
 
 一个 attention kernel 从"数值稳定的 softmax"一路长成"不物化 S×S 的 FA2"， 再长成"decode 专用的 split-K flash-decoding"，中间每一步都有一个可以手推的理由。读完你应当能：
 
-- 手推三件事：①softmax 为什么必须减 max、减完为什么**精确**等价而不是近似；②分块 softmax 的可归并性代数（换基引理 + 合并公式），以及同一套代数为什么能既做"块内 online"又做"块间 reduce"；③FA1→FA2 的循环反转为什么能把 $(m，l，\mathrm{acc})$ 整段留在寄存器里。
+- 手推三件事：①softmax 为什么必须减 max、减完为什么**精确**等价而不是近似；②分块 softmax 的可归并性代数（换基引理 + 合并公式），以及同一套代数为什么能既做"块内 online"又做"块间 reduce"；③FA1→FA2 的循环反转为什么能把 $(m, l, \mathrm{acc})$ 整段留在寄存器里。
 - 说清"87%"的**四要素限定**：简化版、仅 forward、4K 形状（B1·H32/8·D128）、对照 = SDPA flash 后端——缺一不引（本仓措辞约定）；并把差掉的那部分拆到 "算力利用率"这一层。
 - 答上"flash-decoding 到底快几倍"：**2.24±0.11×（naive repeat 预置口径）/ 5.17±0.24×（含 repeat 实体化口径）**，32K 上下文（EXP-T04《Flash-Decoding》），并主动说出反面—— **Skv ≤ 8K 反而只有 0.86-0.88×**，以及这个反亏为什么与算法无关。
 
 ### 1.1 本篇要建立的五条能力
 
 1. **代数能力**：能把 online softmax 写成一个**幺半群**（带单位元的结合运算）， 并当场证明"块内顺扫"与"块间树归"给出同一个数学结果；知道这条性质在哪一步会失效（先除 $l$ 就失效）。
-2. **复杂度能力**：能准确复述 FlashAttention 的 IO 复杂度定理(Θ(N²d²M⁻¹)) 与它的下界命题，知道定理里的 $M$ 指什么、上下界的适用区间 $[d， Nd]$ 是什么意思， 以及**定理没有承诺什么**（它不承诺时间，只承诺 HBM 访问量的阶）。
+2. **复杂度能力**：能准确复述 FlashAttention 的 IO 复杂度定理(Θ(N²d²M⁻¹)) 与它的下界命题，知道定理里的 $M$ 指什么、上下界的适用区间 $[d, Nd]$ 是什么意思， 以及**定理没有承诺什么**（它不承诺时间，只承诺 HBM 访问量的阶）。
 3. **硬件语义能力**：能说出 Ada 每 thread block 的 shared memory 上限是多少、这个上限如何把 BLOCK_N=128 这一档直接判死；能解释 cp.async 的 commit/wait **组**语义与 mma 的 warp 级集合语义如何决定 Triton 的代码形态。
 4. **口径能力**：任何速度数字出口都带形状、dtype、对照物与轮数；知道 2.24× 与 5.17× 不是"哪个更真"，而是两个不同的对照物定义。
 5. **归因能力**：看到一个"kernel 更快但端到端更慢"或"短上下文反亏"的现象， 能把它拆到设备侧 / 主机侧 / 对照物口径三层里的某一层，而不是笼统说"优化不够"。
@@ -85,7 +85,7 @@
 
 ### 2.1 没有 FlashAttention 的世界:一笔可以心算的账
 
-$O = \mathrm{softmax}(QK^\top/\sqrt{d})V$ 照字面写，中间必然出现一个 $S\times S$ 分数矩阵。本仓 bench 形状 B=1、$H_q$=32、S=4096、fp16 下它是 $4096^2\times32\times2\，\mathrm{B}=1.07\，\mathrm{GB}$，一次前向至少写一遍、读一遍、写回一遍、再读一遍，约 $3.2\，\mathrm{GB}$ 的 HBM 往返，在 4090 的 1008 GB/s 上就是 $3.2\，\mathrm{ms}$；而算力账只有 $2BH_qS^2D = 137.4\，\mathrm{GFLOP}$（causal 折半后）， 在 165 TFLOPS 的 fp16 tensor core 上是 $0.83\，\mathrm{ms}$。**物化 $S\times S$ 把一个本该 compute-bound 的算子按成 memory-bound，而且按得很深。**
+$O = \mathrm{softmax}(QK^\top/\sqrt{d})V$ 照字面写，中间必然出现一个 $S\times S$ 分数矩阵。本仓 bench 形状 B=1、$H_q$=32、S=4096、fp16 下它是 $4096^2\times32\times2\,\mathrm{B}=1.07\,\mathrm{GB}$，一次前向至少写一遍、读一遍、写回一遍、再读一遍，约 $3.2\,\mathrm{GB}$ 的 HBM 往返，在 4090 的 1008 GB/s 上就是 $3.2\,\mathrm{ms}$；而算力账只有 $2BH_qS^2D = 137.4\,\mathrm{GFLOP}$（causal 折半后）， 在 165 TFLOPS 的 fp16 tensor core 上是 $0.83\,\mathrm{ms}$。**物化 $S\times S$ 把一个本该 compute-bound 的算子按成 memory-bound，而且按得很深。**
 
 这笔账的每一步都要能自证：
 
@@ -93,7 +93,7 @@ $O = \mathrm{softmax}(QK^\top/\sqrt{d})V$ 照字面写，中间必然出现一�
 - "至少四趟"的来历：一个朴素实现是 `s = q@k.T*scale`（写 1.07 GB）→ `p = softmax(s)`（读 1.07 GB、写 1.07 GB；若 softmax 自身分三趟还要更多）→ `o = p@v`（读 1.07 GB）。合计 3–4 份 1.07 GB，取 3 份即 3.2 GB。这是**下界**， 真实框架实现通常更多。
 - 为什么"进不了片上"：Ada 每个 thread block 最多能拿 99 KB shared memory (Ada Tuning Guide §1.4.1.1)，整卡 128 个 SM × 100 KB = 12.8 MB；1.07 GB 比它大两个数量级，**没有任何调度能把它留在片上**，只能走 HBM。
 
-仓内量尺（EXP-T01《Triton FA2 forward》，3 轮）：S=2048 上 naive fp32 参考 $6.694\pm0.003\，\mathrm{ms}$，本仓 kernel $0.3296\pm0.0007\，\mathrm{ms}$(data/derived/exp-t01_stability_3rounds.csv)—— 20 倍的差距里算法一个 FLOP 都没少，少的全是那趟 HBM 往返。
+仓内量尺（EXP-T01《Triton FA2 forward》，3 轮）：S=2048 上 naive fp32 参考 $6.694\pm0.003\,\mathrm{ms}$，本仓 kernel $0.3296\pm0.0007\,\mathrm{ms}$(data/derived/exp-t01_stability_3rounds.csv)—— 20 倍的差距里算法一个 FLOP 都没少，少的全是那趟 HBM 往返。
 
 ### 2.2 为什么"不物化"是可能的
 
@@ -101,7 +101,7 @@ softmax 的分母是求和，天生可分块累加；唯一障碍是分子里的
 
 这不是 FlashAttention 首创。学术脉络上有两个前身，值得各记一句：
 
-1. Milakov & Gimelshein 在 arXiv：1805.02867 里把"求 max"和"求指数和"合成一趟（Algorithm 3），并用 Theorem 1 的归纳法证明它与三趟版给出**同一个** $d_V$。他们的动机是纯访存：摘要写"we propose a way to compute classical Softmax with fewer memory accesses"，实测"Softmax accelerates by up to 1.3x and Softmax+TopK combined and fused by up to 5x"。
+1. Milakov & Gimelshein 在 arXiv:1805.02867 里把"求 max"和"求指数和"合成一趟（Algorithm 3），并用 Theorem 1 的归纳法证明它与三趟版给出**同一个** $d_V$。他们的动机是纯访存：摘要写"we propose a way to compute classical Softmax with fewer memory accesses"，实测"Softmax accelerates by up to 1.3x and Softmax+TopK combined and fused by up to 5x"。
 2. Rabe & Staats 在 arXiv:2112.05682("Self-attention Does Not Need $O(n^2)$ Memory")把同一招用到 attention 上，维护"an unnormalized running sum $v^*$ and running normalizer $s^*$"，得到单 query $O(1)$、self-attention $O(\log n)$ 的 **内存**结果。
 
 FlashAttention 相对这两者的增量，不在代数而在**目标函数**：前两者优化的是内存占用与访存次数，FlashAttention 把目标明确成"HBM 访问量"，并给出了带下界的复杂度定理（§3.3）。**同一个代数，换一个目标函数，就换出一篇不同的论文**——这是读这条线索时最值得学的一点。
@@ -146,14 +146,14 @@ bf16 与 fp32 的阈值几乎相同，因为两者指数位都是 8 位；bf16 �
 
 常见的误解是"减 max 只是保险起见"。把它量化一下：设 $c$ 是任意基准，则
 
-- 上溢条件：$\exists i,\ x_i - c > \ln(\text{max\_finite})$;
+- 上溢条件：$\exists i,\ x_i - c > \ln(\text{max\_finite})$；
 - 下溢成 0 的条件：$\forall i,\ x_i - c < \ln(\text{min\_subnormal})$。
 
 取 $c = \max_j x_j$ 后，第一个条件恒假（左边 $\le 0$），第二个条件也恒假（至少有一项等于 0，$e^0=1$）。也就是说 **max 是唯一能同时把两个失效条件都变成恒假的选择族里的中心点**：任何 $c < \max - \ln(\text{max\_finite})$ 都会上溢，任何 $c > \max - \ln(\text{min\_subnormal})$ 都会让整行下溢。可用区间宽度对 fp16 是 $11.09 + 16.6 = 27.7$（$\ln$ 最小次正规数 $\approx -16.6$），取中点与取 $\max$ 的差别只是余量分配，而取 $\max$ 让**上溢余量最大**——上溢产生 inf/nan，下溢只损失被指数压得极小的项，两种失效的危害完全不对称。所以取 max 不是折中，是按危害排序后的最优。
 
 #### 3.1.3 三趟 → 两趟 → 一趟:原论文的递推式
 
-Milakov & Gimelshein(arXiv：1805.02867)把"safe softmax"的朴素实现描述为 "three passes over input vector： The first one calculates the maximum value $m_V$， the second one - normalization term $d_V$， and the third one - final values $y_i$"，按他们的计数是每元素 4 次访存；online 版把前两趟合成一趟，降到每元素 3 次。合成的关键就是那条递推（Algorithm 3）：
+Milakov & Gimelshein(arXiv:1805.02867)把"safe softmax"的朴素实现描述为 "three passes over input vector： The first one calculates the maximum value $m_V$， the second one - normalization term $d_V$， and the third one - final values $y_i$"，按他们的计数是每元素 4 次访存；online 版把前两趟合成一趟，降到每元素 3 次。合成的关键就是那条递推（Algorithm 3）：
 
 $$m_j \leftarrow \max(m_{j-1},\, x_j),\qquad d_j \leftarrow d_{j-1}\, e^{m_{j-1}-m_j} + e^{x_j - m_j}$$
 
@@ -183,7 +183,7 @@ $$m_p = \max_{j\in p} s_j,\qquad l_p = \sum_{j\in p} e^{s_j - m_p},\qquad \mathr
 
 **换基引理**：$e^{s-m'} = e^{s-m}\cdot e^{m-m'}$，凭的还是 $e^{a+b}=e^ae^b$；关键在于因子 $e^{m-m'}$ **与 $j$ 无关**，可以从求和号里提出来——一个标量乘法就把整块历史换到新基准。
 
-引理的**成立条件**要说全：①$m，m'$ 都是有限实数，或 $m=-\infty$ 且约定 $e^{-\infty}=0$；②浮点上要求 $m-m'\le 0$ 才保证 $e^{m-m'}\le 1$ 不上溢——而 $m' = \max(m， \cdot)\ge m$ 由构造保证。**"不会上溢是被结构保证的，不是运气"**， 这句话在 §4 第 5 段还会以代码形态出现一次。
+引理的**成立条件**要说全：①$m,m'$ 都是有限实数，或 $m=-\infty$ 且约定 $e^{-\infty}=0$；②浮点上要求 $m-m'\le 0$ 才保证 $e^{m-m'}\le 1$ 不上溢——而 $m' = \max(m, \cdot)\ge m$ 由构造保证。**"不会上溢是被结构保证的，不是运气"**， 这句话在 §4 第 5 段还会以代码形态出现一次。
 
 #### 3.2.2 合并算子与三条代数性质
 
@@ -191,21 +191,21 @@ $$m_p = \max_{j\in p} s_j,\qquad l_p = \sum_{j\in p} e^{s_j - m_p},\qquad \mathr
 
 $$m = \max(m_A, m_B),\quad l = l_A e^{m_A-m} + l_B e^{m_B-m},\quad \mathrm{acc} = \mathrm{acc}_A e^{m_A-m} + \mathrm{acc}_B e^{m_B-m}$$
 
-**正确性验证**（把"代入定义即可验证"这一步真的写出来，本讲义推导）：设 A、B 是不相交的下标集，$m=\max(m_A，m_B)=\max_{j\in A\cup B}s_j$。由换基引理， $l_A e^{m_A-m} = \sum_{j\in A}e^{s_j-m_A}e^{m_A-m} = \sum_{j\in A}e^{s_j-m}$； 对 B 同理。两者相加得 $\sum_{j\in A\cup B}e^{s_j-m}$，这正是"把 $A\cup B$ 当一块直接算"的 $l$。$\mathrm{acc}$ 逐分量重复同一步。**注意这一步只用了有限和的可交换与结合律，没有用任何近似**——所以合并是精确的。
+**正确性验证**（把"代入定义即可验证"这一步真的写出来，本讲义推导）：设 A、B 是不相交的下标集，$m=\max(m_A,m_B)=\max_{j\in A\cup B}s_j$。由换基引理， $l_A e^{m_A-m} = \sum_{j\in A}e^{s_j-m_A}e^{m_A-m} = \sum_{j\in A}e^{s_j-m}$； 对 B 同理。两者相加得 $\sum_{j\in A\cup B}e^{s_j-m}$，这正是"把 $A\cup B$ 当一块直接算"的 $l$。$\mathrm{acc}$ 逐分量重复同一步。**注意这一步只用了有限和的可交换与结合律，没有用任何近似**——所以合并是精确的。
 
 三条性质，每条都在实现里被用到：
 
 - **结合律**：$(x\oplus y)\oplus z = x\oplus(y\oplus z)$。证明要点：两边的 $m$ 都是三者的 max，而三个 acc 项各自被乘上 $e^{m_\bullet - m}$；由 $e^ae^b=e^{a+b}$， 分两步换基与一步换基给出同一个因子。**结论**：分块方式、归并顺序、树形还是线性， 数学结果同一个（浮点舍入除外）——这就是"块内 online 顺扫"与"块间一次性 reduce" 能共用一套代数的原因。
 - **交换律**：$\oplus$ 只依赖 $\max$ 与加法，两者都可交换。
-- **单位元** $(-\infty， 0， \mathbf{0})$：$e^{-\infty-m}=0$ 使空块贡献自动湮灭， 不需要任何 if 分支——src/flash_decode.py：121-123 直接吃这条性质。
+- **单位元** $(-\infty, 0, \mathbf{0})$：$e^{-\infty-m}=0$ 使空块贡献自动湮灭， 不需要任何 if 分支——src/flash_decode.py：121-123 直接吃这条性质。
 
-三条合起来：$(\{(m，l，\mathrm{acc})\}，\oplus)$ 是一个**交换幺半群**。这是本篇最值钱的一句抽象：任何"可以并行归约"的算子都必须是幺半群，而 attention 的 softmax 能被分块，正因为有人把它写成了幺半群。
+三条合起来：$(\{(m,l,\mathrm{acc})\},\oplus)$ 是一个**交换幺半群**。这是本篇最值钱的一句抽象：任何"可以并行归约"的算子都必须是幺半群，而 attention 的 softmax 能被分块，正因为有人把它写成了幺半群。
 
 #### 3.2.3 "除法必须最后做"不是省除法的小优化
 
 若每块先算 $\mathrm{acc}_p/l_p$ 就丢了 $l_p$ 这个权重，合并得写成加权平均 $\big(\sum_p l_p e^{m_p-m}\cdot\tfrac{\mathrm{acc}_p}{l_p}\big)/\sum_p l_p e^{m_p-m}$， $l_p$ 还是得带着走。换句话说：**"先除"并没有减少需要传递的状态，只是把状态藏进了一个更难看的公式里**；而且它引入了一次额外的除法与一次额外的乘法（先除后乘回来）， 数值上还多一次舍入。所以"最后再除"是**可归并性的自然形式**，不是省除法的小技巧。
 
-FlashAttention-2 论文把这件事说成算法层的改动（arXiv:2307.08691 §3.1）: "We do not have to rescale both terms of the output update by $\mathrm{diag}(\ell^{(2)})^{-1}$"，而是 "maintain an 'un-scaled' version of $O^{(2)}$ and keep around the statistics $\ell^{(2)}$ ... Only at the every end of the loop do we scale the final $\tilde O^{(\text{last})}$ by $\mathrm{diag}(\ell^{(\text{last})})^{-1}$ to get the right output"。同一节还提到反向只需存 logsumexp: "We only need to store the logsumexp $L^{(j)}=m^{(j)}+\log(\ell^{(j)})$"——本仓只做 forward，不存 $L$，这一条列为**未实现**而非"不需要"（§6 适用边界）。
+FlashAttention-2 论文把这件事说成算法层的改动（arXiv:2307.08691 §3.1）： "We do not have to rescale both terms of the output update by $\mathrm{diag}(\ell^{(2)})^{-1}$"，而是 "maintain an 'un-scaled' version of $O^{(2)}$ and keep around the statistics $\ell^{(2)}$ ... Only at the every end of the loop do we scale the final $\tilde O^{(\text{last})}$ by $\mathrm{diag}(\ell^{(\text{last})})^{-1}$ to get the right output"。同一节还提到反向只需存 logsumexp： "We only need to store the logsumexp $L^{(j)}=m^{(j)}+\log(\ell^{(j)})$"——本仓只做 forward，不存 $L$，这一条列为**未实现**而非"不需要"（§6 适用边界）。
 
 #### 3.2.4 精确恒等 vs 浮点舍入:误差到底有多大
 
@@ -228,11 +228,11 @@ FlashAttention-2 论文把这件事说成算法层的改动（arXiv:2307.08691 �
 
 #### 3.3.1 三条结论的准确陈述
 
-FlashAttention(arXiv：2205.14135)给的不是"更快"，而是三条可证的结论。逐条抄原文并解释：
+FlashAttention(arXiv:2205.14135)给的不是"更快"，而是三条可证的结论。逐条抄原文并解释：
 
-1. **Theorem 1**（正确性与内存）："Algorithm 1 returns $\mathbf{O}=\mathrm{softmax}(\mathbf{QK}^\top)\mathbf{V}$ with $O(N^2d)$ FLOPs and requires $O(N)$ additional memory beyond inputs and output."——读法：**FLOPs 一个没省**($O(N^2d)$ 与朴素同阶)，省的是额外内存($O(N)$ 而不是 $O(N^2)$)。任何"FlashAttention 减少了计算量"的说法都与 Theorem 1 矛盾。
-2. **Theorem 2**（IO 复杂度）:"Standard attention requires $\Theta(Nd+N^2)$ HBM accesses, while FlashAttention requires $\Theta(N^2d^2M^{-1})$ HBM accesses." 前提写在定理的设定里：$d \le M \le Nd$,$M$ 是片上 SRAM 的容量。
-3. **Proposition 3**（下界）："There does not exist an algorithm to compute exact attention with $o(N^2d^2M^{-1})$ HBM accesses for all $M$ in the range $[d， Nd]$."——读法：Theorem 2 的上界在这个 $M$ 区间上**是紧的**，不存在渐进更优的精确算法。这条命题才是这篇论文与"又一个 attention 优化"的分界线。
+1. **Theorem 1**（正确性与内存）："Algorithm 1 returns $\mathbf{O}=\mathrm{softmax}(\mathbf{QK}^\top)\mathbf{V}$ with $O(N^2d)$ FLOPs and requires $O(N)$ additional memory beyond inputs and output."——读法：**FLOPs 一个没省**（$O(N^2d)$ 与朴素同阶），省的是额外内存（$O(N)$ 而不是 $O(N^2)$）。任何"FlashAttention 减少了计算量"的说法都与 Theorem 1 矛盾。
+2. **Theorem 2**（IO 复杂度）："Standard attention requires $\Theta(Nd+N^2)$ HBM accesses， while FlashAttention requires $\Theta(N^2d^2M^{-1})$ HBM accesses." 前提写在定理的设定里：$d \le M \le Nd$，$M$ 是片上 SRAM 的容量。
+3. **Proposition 3**（下界）："There does not exist an algorithm to compute exact attention with $o(N^2d^2M^{-1})$ HBM accesses for all $M$ in the range $[d, Nd]$."——读法：Theorem 2 的上界在这个 $M$ 区间上**是紧的**，不存在渐进更优的精确算法。这条命题才是这篇论文与"又一个 attention 优化"的分界线。
 
 论文给的硬件量纲（A100）:"The A100 GPU has 40-80GB of high bandwidth memory with bandwidth 1.5-2.0TB/s and 192KB of on-chip SRAM per streaming multiprocessor with bandwidth estimated around 19TB/s."并注明"For typical values of $d$ (64-128) and $M$ (around 100KB), $d^2$ is many times smaller than $M$"。
 
@@ -247,14 +247,14 @@ FlashAttention(arXiv：2205.14135)给的不是"更快"，而是三条可证的�
 - 相乘：$\Theta(Nd/M)\times\Theta(Nd)=\Theta(N^2d^2/M)$。
 - **上界区间 $M\le Nd$ 的意义**：若 $M > Nd$，整个 K/V 一次装下，$T_c=1$，访问量退化成 $\Theta(Nd)$，定理的形式不再有意义；**下界区间 $M\ge d$ 的意义**：至少要能装下一行，否则连一次点积都做不完。
 
-Algorithm 1 的块大小设定原文是："Set block sizes $B_c=\lceil M/4d\rceil$， $B_r=\min(\lceil M/4d\rceil， d)$"。注意 $B_r$ 那个 $\min(\cdot， d)$：它保证 $B_r\times d$ 的 Q 块不会比一个 K/V 块还大，是为了让片上预算平摊——**论文没解释这个 min 的来历，补出来就是"Q 块的两个维度乘积受同一份 $M$ 约束"**。
+Algorithm 1 的块大小设定原文是："Set block sizes $B_c=\lceil M/4d\rceil$， $B_r=\min(\lceil M/4d\rceil, d)$"。注意 $B_r$ 那个 $\min(\cdot, d)$：它保证 $B_r\times d$ 的 Q 块不会比一个 K/V 块还大，是为了让片上预算平摊——**论文没解释这个 min 的来历，补出来就是"Q 块的两个维度乘积受同一份 $M$ 约束"**。
 
 #### 3.3.3 把定理代进本仓形状:被消掉的与没被消掉的
 
 一个常见的半对说法是"FA 把 HBM 流量从 $O(S^2)$ 降到 $O(S\cdot D)$"。按 Theorem 2 的准确形式，降到的是 $\Theta(S^2D^2/M)$，不是 $\Theta(SD)$。精确一点：
 
 - **被消掉的**：$S\times S$ 分数矩阵的**写回 + 读取**——1.07 GB 对 99 KB 级的 per-block shared memory，无论如何进不了片上，是纯粹不可缓存的 HBM 往返。
-- **没有被消掉的**：K/V 的**重读**。每个 Q 行块都要把可见的那段 K/V 整条流过一遍， S=4096、BLOCK_M=128 时有 $S/\mathrm{BM}=32$ 个 Q 行块，causal 下平均各读一半： $$0.5 \times 32 \times \underbrace{(8 \times 4096 \times 128 \times 2\，\mathrm{B}) \times 2}_{K+V=16.8\，\mathrm{MB}} \approx 268\ \mathrm{MB}$$ 在 1008 GB/s 上约 $0.266\，\mathrm{ms}$，占实测 $1.1184\，\mathrm{ms}$ 的 24%；同形状的算力时间是 $137.4/165 = 0.83\，\mathrm{ms}$，占 74%。**compute-bound 成立，但不是因为"访存量降到 $O(S\cdot D)$"，而是因为剩下的访存量正好被算力盖住。**
+- **没有被消掉的**：K/V 的**重读**。每个 Q 行块都要把可见的那段 K/V 整条流过一遍， S=4096、BLOCK_M=128 时有 $S/\mathrm{BM}=32$ 个 Q 行块，causal 下平均各读一半： $$0.5 \times 32 \times \underbrace{(8 \times 4096 \times 128 \times 2\,\mathrm{B}) \times 2}_{K+V=16.8\,\mathrm{MB}} \approx 268\ \mathrm{MB}$$ 在 1008 GB/s 上约 $0.266\,\mathrm{ms}$，占实测 $1.1184\,\mathrm{ms}$ 的 24%；同形状的算力时间是 $137.4/165 = 0.83\,\mathrm{ms}$，占 74%。**compute-bound 成立，但不是因为"访存量降到 $O(S\cdot D)$"，而是因为剩下的访存量正好被算力盖住。**
 
 **这个 268 MB 用的是什么假设，必须挑明**（本讲义推导）。它按"每个 Q 行块索引 $m$ 把整份 KV（8 个 kv 头）读一遍"计数，隐含假设是：同一个 $m$ 上的 4 个共享同一 kv 头的 q head **彼此复用到了缓存**。把假设两端放松，得到一对夹逼：
 
@@ -268,7 +268,7 @@ Algorithm 1 的块大小设定原文是："Set block sizes $B_c=\lceil M/4d\rcei
 
 #### 3.3.4 tile 尺寸的三个来源:理论上界 / 硬件约束 / 实测扫描
 
-这条账还解释了 tile 扫描的主要结果：BLOCK_M 从 64 提到 128,4K 上 $1.362\to1.126\，\mathrm{ms}$（+17%，EXP-T01 §5，tile 扫描为终端级证据）。BM 翻倍同时做了两件事：K/V 的重读**次数减半**，以及每块 softmax 簿记被更多 Q 行摊薄。反方向的硬约束同样实测过：BLOCK_N 提到 128 直接 OOM（需求 160 KB）。
+这条账还解释了 tile 扫描的主要结果：BLOCK_M 从 64 提到 128,4K 上 $1.362\to1.126\,\mathrm{ms}$（+17%，EXP-T01 §5，tile 扫描为终端级证据）。BM 翻倍同时做了两件事：K/V 的重读**次数减半**，以及每块 softmax 簿记被更多 Q 行摊薄。反方向的硬约束同样实测过：BLOCK_N 提到 128 直接 OOM（需求 160 KB）。
 
 把本仓每个 tile 相关的魔法数按"谁决定的"分类（这是 §3.8 的预告）：
 
@@ -301,7 +301,7 @@ FlashAttention-2(arXiv:2307.08691)摘要把改动列成三条： "tweak the algo
 
 #### 3.4.2 循环反转的中间量账(本讲义推算,非实测)
 
-FA1 的循环是**外层 K/V、内层 Q**，而 $(m，l，\mathrm{acc})$ 是**按 Q 行**维护的，所以每处理一个 K/V 块就要把所有 Q 行块的三元组从 HBM 读出、更新、写回。按本仓形状粗算（BM=128、BN=64、S=4096、每行 $2+D=130$ 个 fp32）：
+FA1 的循环是**外层 K/V、内层 Q**，而 $(m,l,\mathrm{acc})$ 是**按 Q 行**维护的，所以每处理一个 K/V 块就要把所有 Q 行块的三元组从 HBM 读出、更新、写回。按本仓形状粗算（BM=128、BN=64、S=4096、每行 $2+D=130$ 个 fp32）：
 
 $$\underbrace{\frac{S}{\mathrm{BN}}}_{64\ \text{个 K 块}} \times \underbrace{\frac{S}{\mathrm{BM}}}_{32\ \text{个 Q 块}} \times \underbrace{128 \times 130 \times 4\,\mathrm{B}}_{\text{一个 Q 块的三元组}} \approx 136\ \mathrm{MB}\ (\text{每 } (b,h)\ \text{读写各一遍})$$
 
@@ -325,7 +325,7 @@ FA2 论文把理由写得很直白：A100 有 "max theoretical throughput of 312
 
 GQA 让多个 q head 共享一个 kv head。kernel 里改的只有一行： `hkv = hq // GQA_GROUP`(src/fa2_fwd.py：55)。
 
-- **为什么可以这么写**：GQA 的定义就是**连续分组**共享(第 $g$ 组 q head 是 $[gG，(g+1)G)$)，整数除法正是那个映射。论文（arXiv：2305.13245）的定位是 "an interpolation between multi-query and multi-head attention"，目标是在 MQA 的带宽收益与 MHA 的质量之间取中间点。
+- **为什么可以这么写**：GQA 的定义就是**连续分组**共享（第 $g$ 组 q head 是 $[gG,(g+1)G)$），整数除法正是那个映射。论文（arXiv:2305.13245）的定位是 "an interpolation between multi-query and multi-head attention"，目标是在 MQA 的带宽收益与 MHA 的质量之间取中间点。
 - **收益在哪**：KV 的 HBM 读取量按 $H_{kv}/H_q$ 缩小（本仓 8/32 = 1/4），而且 **不物化 repeat**——参考实现要 `repeat_interleave` 造一份 4 倍大的 KV (scripts/test_fa2.py：25-26)，kernel 只换个索引读原张量。这份"免掉的拷贝"在 §5 的三臂口径里被单独标价。
 - **改错会怎样**：写成 `hq % Hkv` 就把连续分组改成轮转分组——不 nan、不越界、性能一模一样，只是**悄悄算错**。正确性 gate 里的 `(1, 16, 4, 777, 128, True)` (scripts/test_fa2.py：41)就是为抓这类"安静的错误"设的格。
 
@@ -385,7 +385,7 @@ $$\text{shared} = \underbrace{\mathrm{BM}\times D\times 2\,\mathrm{B}}_{Q\ \text
 | 128 | 2 | 32 + 1×64 = 96 KB | 98304 |
 | 128 | 3 | 32 + 2×64 = **160 KB** | **OOM(163840 > 101376)** |
 
-**注意那个 $\max(1， N-1)$**——它不是笔误，是 Triton 3.6 在本机的实测语义，讲义 02 §3.3 专门讲透。这里只需要它的一个推论：**BLOCK_N=128 在 stages=2 那一档是能编译的（96 KB），OOM 只发生在 stages=3**；而 stages=2 那一档的寄存器打到 255/线程（Ada 每线程上限，Tuning Guide §1.4.1.1），等于把压力从 shared memory 换到了寄存器。 EXP-T01 的 tile 扫描是终端级证据、未记录 stages 列，所以"当年那次 OOM 具体在哪一档" 无法回溯；**能确定的是那个字节数与那堵墙**。
+**注意那个 $\max(1, N-1)$**——它不是笔误，是 Triton 3.6 在本机的实测语义，讲义 02 §3.3 专门讲透。这里只需要它的一个推论：**BLOCK_N=128 在 stages=2 那一档是能编译的（96 KB），OOM 只发生在 stages=3**；而 stages=2 那一档的寄存器打到 255/线程（Ada 每线程上限，Tuning Guide §1.4.1.1），等于把压力从 shared memory 换到了寄存器。 EXP-T01 的 tile 扫描是终端级证据、未记录 stages 列，所以"当年那次 OOM 具体在哪一档" 无法回溯；**能确定的是那个字节数与那堵墙**。
 
 #### 3.7.2 cp.async 的 commit-wait 组语义
 
@@ -488,7 +488,7 @@ Ada 白皮书对 SM 的描述给了发射规则："the AD10x SM is divided into 
                                       # 索引读原 KV,不物化 repeat(省 HBM 与显存)
 ```
 
-角色：把线性 program id 翻译成 $（b，h_q，\text{M 块}）$ 三元坐标，顺手完成 GQA 头映射。 **这里没有任何原子操作与跨 program 通信**——每个 program 独占一个输出行块，这是循环反转（§3.4）的结构性好处，也是三元组能常驻寄存器的前提。改错会怎样：`GQA_GROUP` 若不是 `tl.constexpr`，整数除法从编译期常量折叠变成运行期指令，寻址开销进热路径。
+角色：把线性 program id 翻译成 $(b,h_q,\text{M 块})$ 三元坐标，顺手完成 GQA 头映射。 **这里没有任何原子操作与跨 program 通信**——每个 program 独占一个输出行块，这是循环反转（§3.4）的结构性好处，也是三元组能常驻寄存器的前提。改错会怎样：`GQA_GROUP` 若不是 `tl.constexpr`，整数除法从编译期常量折叠变成运行期指令，寻址开销进热路径。
 
 **为什么 `pid_bh` 放在 grid 的第二维而不是第一维**（值得单独想一遍）：CUDA 的 blockIdx 按 x 维最快变化，同一时刻在跑的 CTA 其 `program_id(0)` 相邻。把 M 块放在第 0 维意味着**相邻 CTA 处理同一个（b， hq） 的相邻 Q 行块**，它们读的是同一段 K/V → L2 命中率高。若对调两维，相邻 CTA 会分属不同 head，读的 K/V 完全不同，L2 复用被打散。这与讲义 02 §3.1 的 grouped 调度是同一条原理的两种实现（本讲义推导，本仓未做对调两维的对照实验）。
 
@@ -549,7 +549,7 @@ Ada 白皮书对 SM 的描述给了发射规则："the AD10x SM is divided into 
             qk = tl.where(offs_m[:, None] >= curr_n[None, :], qk, float("-inf"))
 ```
 
-角色：这一段同时处理**算力**与**正确性**，且刻意用了三种不同的越界处理。`hi` 是算力那件事：本块行号 $\in[\mathrm{pid}_m\mathrm{BM}，(\mathrm{pid}_m+1)\mathrm{BM})$， causal 下行 $m$ 只可见列 $n\le m$，故可见列的上确界是 $(\mathrm{pid}_m+1)\mathrm{BM}$——对角线以下的整块**根本不进循环**，FLOPs 直接减半。这是"mask 不只是填 $-\infty$， 更是根本不算"的实现，与 FA2 论文 §3.2 的说法一致： "For any blocks where all the column indices are more than the row indices (approximately half of the blocks for large sequence length)， we can skip the computation of that block."
+角色：这一段同时处理**算力**与**正确性**，且刻意用了三种不同的越界处理。`hi` 是算力那件事：本块行号 $\in[\mathrm{pid}_m\mathrm{BM},(\mathrm{pid}_m+1)\mathrm{BM})$， causal 下行 $m$ 只可见列 $n\le m$，故可见列的上确界是 $(\mathrm{pid}_m+1)\mathrm{BM}$——对角线以下的整块**根本不进循环**，FLOPs 直接减半。这是"mask 不只是填 $-\infty$， 更是根本不算"的实现，与 FA2 论文 §3.2 的说法一致： "For any blocks where all the column indices are more than the row indices (approximately half of the blocks for large sequence length)， we can skip the computation of that block."
 
 三种越界处理的分工必须分清：①K/V 的 `tl.load(..., other=0.0)` 补 0 只为让访存合法； ②`qk = tl.where(curr_n < n_ctx, qk, -inf)` 才是真正的剔除，**必须是 $-\infty$ 不是 0**——$e^{0-m}$ 会给每个越界列贡献一份假质量进 $l_i$ 与 $\mathrm{acc}$；③causal 的逐元素 mask 无条件套用，不判"是不是对角块"，谓词开销远小于一个控制流分支。改错会怎样：② 若省掉，S=777 这类非整除形状会**安静地算错**（多算 7 列假质量），正确性 gate 里 S=777 那格（scripts/test_fa2.py：41）就是为它设的。
 
@@ -573,7 +573,7 @@ Ada 白皮书对 SM 的描述给了发射规则："the AD10x SM is divided into 
         m_i = m_new
 ```
 
-角色：§3.2 的合并算子在 kernel 里的样子，整篇讲义的核心五行。逐行对应：`m_new` = $\max(m_A，m_B)$、`alpha` = 换基因子 $e^{m_A-m}$、`p` = 新块在新基准下的指数、`l_i` 与 `acc` 就是合并公式的两条。三个细节：①`alpha` 恒 $\le1$ 且 $m$ 单调不减，保证所有 `tl.exp` 的参数 $\le0$——**不会上溢是被结构保证的，不是运气**；②`p.to(v.dtype)` 把概率降回 fp16 走 tensor core，精度损失由 gate 兜底，是明确接受的交易；③`IEEE_DOT` 关掉 TF32 走真 fp32，只在校验路线用。改错会怎样：`l_i` 与 `acc` 少乘一个 `alpha`， 输出不会 nan 只会偏，只有与 fp32 精算逐元素比对才抓得住。
+角色：§3.2 的合并算子在 kernel 里的样子，整篇讲义的核心五行。逐行对应：`m_new` = $\max(m_A,m_B)$、`alpha` = 换基因子 $e^{m_A-m}$、`p` = 新块在新基准下的指数、`l_i` 与 `acc` 就是合并公式的两条。三个细节：①`alpha` 恒 $\le1$ 且 $m$ 单调不减，保证所有 `tl.exp` 的参数 $\le0$——**不会上溢是被结构保证的，不是运气**；②`p.to(v.dtype)` 把概率降回 fp16 走 tensor core，精度损失由 gate 兜底，是明确接受的交易；③`IEEE_DOT` 关掉 TF32 走真 fp32，只在校验路线用。改错会怎样：`l_i` 与 `acc` 少乘一个 `alpha`， 输出不会 nan 只会偏，只有与 fp32 精算逐元素比对才抓得住。
 
 **②这个交易到底赔多少**（本讲义推导）：$p\in(0,1]$，fp16 在 $(0,1]$ 上的相对精度是 $2^{-11}\approx 4.9\times10^{-4}$；$\mathrm{acc}$ 是 $p$ 的加权和，相对误差不会超过单项相对误差（加权平均不放大相对误差），所以这一步引入的相对误差在 5e-4 量级。 gate 阈值 2e-2 比它宽 40 倍，实测 6 形状全部 ≤ 2e-3(EXP-T01 §5)。**换来的是 `tl.dot` 走 tensor core 而不是 SIMT**——按 §3.4.3 的比值，至少是 2 倍的算力差。 **这就是"明确接受的交易"应该长的样子：代价可算、收益可算、判据先锁。**
 
@@ -629,7 +629,7 @@ Ada 白皮书对 SM 的描述给了发射规则："the AD10x SM is divided into 
 
 角色：split-K 的"分"。与第 4/5 段逐行对照即知：**这是同一套 online softmax，只是行数从 BLOCK_M 变成 1**。三处刻意差异：①`hi = min(lo + split_size, n_ctx)` 把段边界与序列边界一起兜住，`kmask = curr < hi` 一个条件管两件事；②用广播乘 + 行内规约替代 `tl.dot`——$S_q=1$ 时 tensor core 的 M 维粒度是 16、要 pad，15/16 的算力全废（§3.7.3）， 而 decode 本就是带宽瓶颈，SIMT 反而干净；③全程 fp32，部分量要参与跨段换基。改错会怎样：`hi` 换回 `n_ctx` 则每段都扫完整条 KV，split-K 变成 splits 倍的重复劳动， **而结果依然正确**——最难查的一类性能 bug。
 
-**②的量化依据**（本讲义推导，EXP-T04 协议 32K）：整条 KV 只读一次， FLOPs $= 2\times2\times H_q S_{kv} D = 2\times2\times16\times32768\times128 \approx 2.68\times10^8$，字节 $= 2\times(8\times32768\times128)\times2\,\mathrm{B} = 134.2\,\mathrm{MB}$，算术强度 $\approx 2.0$ FLOP/B。而 4090 的 ops:byte 是 $165.2\times10^{12}/1008\times10^9 \approx 164$ FLOP/B（NVIDIA GPU Performance Background User's Guide §4 的定义）。**2.0 对 164，差 82 倍——tensor core 在这里一点用都没有，放弃它不是妥协是正解。**
+**②的量化依据**（本讲义推导，EXP-T04 协议 32K）：整条 KV 只读一次， FLOPs $= 2\times2\times H_q S_{kv} D = 2\times2\times16\times32768\times128 \approx 2.68\times10^8$，字节 $= 2\times(8\times32768\times128)\times2\,\mathrm{B} = 134.2\,\mathrm{MB}$，算术强度 $\approx 2.0$ FLOP/B。而 4090 的 ops：byte 是 $165.2\times10^{12}/1008\times10^9 \approx 164$ FLOP/B（NVIDIA GPU Performance Background User's Guide §4 的定义）。**2.0 对 164，差 82 倍——tensor core 在这里一点用都没有，放弃它不是妥协是正解。**
 
 **第 8 段 · combine kernel：块间归并与空段湮灭**(src/flash_decode.py：115-125)
 
@@ -647,7 +647,7 @@ Ada 白皮书对 SM 的描述给了发射规则："the AD10x SM is divided into 
              out.to(O.dtype.element_ty))
 ```
 
-角色：split-K 的"合"，§3.2 代数的第二次使用。注释里那段推导要能当场写出来： $\sum_p l_p e^{m_p-m_g} = \sum_i e^{s_i-m_g}$ 是**全局行和**， $\sum_p \mathrm{acc}_p e^{m_p-m_g} = \sum_i e^{s_i-m_g}v_i$ 是**全局未归一化输出**， 相除即精确结果，与单 pass 同源而非近似。两个工程细节：①`tl.exp(m - m_g)` 对空段自动给 0，`next_power_of_2` 造出的空段不需特判（单位元性质在此兑现）；②每个 $(b，h)$ 用 **一个 program 串行收全部段**而非树规约或原子——splits 至多几百，直读更快且**求和顺序确定**、数值可复现。改错会怎样：改成 atomicAdd 则 $m_g$ 未知无法换基（§3.6.3）； `NUM_SPLITS` 传非 2 的幂则 `tl.arange` 编译期报错，launcher 的 `next_power_of_2` (src/flash_decode.py：147)就是这条约束的兑付。
+角色：split-K 的"合"，§3.2 代数的第二次使用。注释里那段推导要能当场写出来： $\sum_p l_p e^{m_p-m_g} = \sum_i e^{s_i-m_g}$ 是**全局行和**， $\sum_p \mathrm{acc}_p e^{m_p-m_g} = \sum_i e^{s_i-m_g}v_i$ 是**全局未归一化输出**， 相除即精确结果，与单 pass 同源而非近似。两个工程细节：①`tl.exp(m - m_g)` 对空段自动给 0，`next_power_of_2` 造出的空段不需特判（单位元性质在此兑现）；②每个 $(b,h)$ 用 **一个 program 串行收全部段**而非树规约或原子——splits 至多几百，直读更快且**求和顺序确定**、数值可复现。改错会怎样：改成 atomicAdd 则 $m_g$ 未知无法换基（§3.6.3）； `NUM_SPLITS` 传非 2 的幂则 `tl.arange` 编译期报错，launcher 的 `next_power_of_2` (src/flash_decode.py：147)就是这条约束的兑付。
 
 ②这条"求和顺序确定"的价值，在长上下文上是可以量化的：combine 的输入是 `(B, Hq, num_splits, D)` 的 fp32,32K 那格 splits=16，即每个输出元素是 16 项的和。 **16 项定序求和 vs 原子无序求和，前者跨运行逐位可复现，后者不可**。本仓选可复现， 理由与 flash_decode.py 文件头"fp32 是硬要求"同源：**部分量参与非线性换基，任何额外噪声都会被 $e^{\cdot}$ 放大。**
 
@@ -677,7 +677,7 @@ figures/fig1_fa2_vs_sdpa.png（脚本 scripts/plot_readme_figures.py:59-90）。
 - **轴与口径**：横向条形图，x = 时延（ms，越短越好），y = 序列长 $S\in\{512,1024,2048,4096\}$；两条 = 本仓 FA2 简化版 / torch SDPA（flash 后端）； 误差条 = **3 轮 std**（非轮内 100 次迭代的分布）。源数据 exp-t01_stability_3rounds.csv。
 - **百分比标签的定义**：`eff = sdpa_ms / ours_ms * 100`(plot_readme_figures.py：64)， 是**效率**不是加速比；读反了会把"达到官方的 87%"说成"比官方慢 87%"。四格效率 88/75/86/87% 非单调，不要挑数字讲（整表见 docs/theory/01_flashattention.md §3； 512 那格为何不可当真见 §6 第 2 条）。
 - **87% 的四要素**（本仓措辞约定，缺一不引）：**简化版 / 仅 forward / 4K 形状（B1·H32/8·D128，fp16）/ 对照 = SDPA flash 后端**。3 轮口径 $1.1184\pm0.0015$ vs $0.9749\pm0.0024$ ms → **87.2%**；存盘单轮 1.119 vs 0.979 → 87.45%，**不进位**记 87%(EXP-T01 §5)。
-- **机理账（可以心算的那种）**： $$\mathrm{FLOPs} = \frac{4\，B H_q S^2 D}{2}\Big|_{\text{causal}} = 2\times1\times32\times4096^2\times128 = 137.4\ \mathrm{GFLOP}$$（口径就写在 scripts/test_fa2.py：71-73）。除以 1.1184 ms 得 **122.9 TFLOPS**（与 derived 的 122.867 对上）；对 4090 fp16 tensor core 峰值 165 TFLOPS（docs/theory/04 §2 口径）= **74%**，与 kperf 卡片的 "算力 74%、occupancy 17%(regs 213)"逐点吻合（终端级证据，登记于 EXP-T06 §7）。 SDPA 侧 141 TFLOPS = 85%。**所以"差 13%"的准确说法是算力利用率 74% vs 85%**， 不来自算法差异（两边都是 FA2），而来自 tensor-core 布局微调、cp.async 双缓冲、 warp 专业化这三层抽象税（docs/theory/01 §4）。
+- **机理账（可以心算的那种）**： $$\mathrm{FLOPs} = \frac{4\,B H_q S^2 D}{2}\Big|_{\text{causal}} = 2\times1\times32\times4096^2\times128 = 137.4\ \mathrm{GFLOP}$$（口径就写在 scripts/test_fa2.py：71-73）。除以 1.1184 ms 得 **122.9 TFLOPS**（与 derived 的 122.867 对上）；对 4090 fp16 tensor core 峰值 165 TFLOPS（docs/theory/04 §2 口径）= **74%**，与 kperf 卡片的 "算力 74%、occupancy 17%(regs 213)"逐点吻合（终端级证据，登记于 EXP-T06 §7）。 SDPA 侧 141 TFLOPS = 85%。**所以"差 13%"的准确说法是算力利用率 74% vs 85%**， 不来自算法差异（两边都是 FA2），而来自 tensor-core 布局微调、cp.async 双缓冲、 warp 专业化这三层抽象税（docs/theory/01 §4）。
 - **这个设计防了哪些坑**：①**正确性 gate 先于性能**——6 形状（MHA、GQA 2:1/4:1、 S=777 非整除、双 head_dim、非 causal）max abs err ≤ 2e-3 全过，参考是 fp32 精算（scripts/test_fa2.py：22-31）；②**对照物命名诚实**——显式 `sdpa_kernel(SDPBackend.FLASH_ATTENTION)`(scripts/test_fa2.py：85-89)把后端钉死， 否则 SDPA 可能落到 math 后端，那就成了和另一个算法比；③**naive fp32 臂**给出量尺， S>2048 时如实记 NaN 不补估计值；④**3 轮 std** 除 S=512 那格外全部 ≤0.3%，所以 87.2% 与 87.45% 的差异是轮次噪声。
 
 **把四格效率的非单调性讲清楚**（本讲义推导，给出可检验的解释而不是含糊带过）：
@@ -706,15 +706,15 @@ data/derived/exp-t04_stability_3rounds.csv（3 轮，协议 B1·Hq16/Hkv8·D128�
 
 **机理账（把加速比算回字节比）**：三臂在 32K 那格全部带宽受限，加速比应当约等于搬运字节比。逐臂列式（bf16,2 B/元素）：
 
-- flash_decode：只读未 repeat 的 KV,$2\times(8\times32768\times128)\times2\,\mathrm{B} = 134.2\,\mathrm{MB}$（中间量 Accp 仅 131 KB，可忽略）;$/0.1515\,\mathrm{ms} = 886\ \mathrm{GB/s}$ = 1008 峰值的 **88%**。
-- naive[repeat 预置]：读 16 头 KV = 268.4 MB + 物化分数矩阵往返约 4 MB $\approx 272.6\,\mathrm{MB}$;$/0.3393\,\mathrm{ms} = 803\ \mathrm{GB/s}$ = **80%**。
+- flash_decode：只读未 repeat 的 KV，$2\times(8\times32768\times128)\times2\,\mathrm{B} = 134.2\,\mathrm{MB}$（中间量 Accp 仅 131 KB，可忽略）；$/0.1515\,\mathrm{ms} = 886\ \mathrm{GB/s}$ = 1008 峰值的 **88%**。
+- naive[repeat 预置]：读 16 头 KV = 268.4 MB + 物化分数矩阵往返约 4 MB $\approx 272.6\,\mathrm{MB}$；$/0.3393\,\mathrm{ms} = 803\ \mathrm{GB/s}$ = **80%**。
 - naive[含 repeat]：再加 repeat 的写 268.4 MB + 读 134.2 MB，共 $\approx675\,\mathrm{MB}$; $/0.7822\,\mathrm{ms} = 863\ \mathrm{GB/s}$ = **86%**。
 
 字节比 $272.6/134.2=2.03$（实测 2.24）、$675/134.2=5.03$（实测 5.17）：**两个口径的差就是 repeat 那份拷贝的读写**；拆开看，2× 来自 GQA 不 repeat($H_q/H_{kv}=2$)，剩下的 2.5× 来自 repeat 本身。（字节数按协议推算、时间为 3 轮实测；算式与实测 10% 内的偏差来自小张量 kernel 的效率差异，未单独隔离。）
 
-**Accp 那 131 KB 是怎么算的**（补出中间步）：`accp` 形状 $(B， H_q， \text{splits}， D) = (1,16,16,128)$ fp32 $= 131072\，\mathrm{B}$，加上 `mp`/`lp` 各 $(1,16,16)$ fp32 = 1 KB。写一遍读一遍共约 262 KB，占 134.2 MB 的 **0.2%**——**split-K 的额外流量在长上下文上完全可以忽略，这正是它在长上下文划算的结构性原因**。反过来在 512 那格：KV 只有 2.1 MB，262 KB 占 12%，再加上多一次 launch，划不来就是必然。
+**Accp 那 131 KB 是怎么算的**（补出中间步）：`accp` 形状 $(B, H_q, \text{splits}, D) = (1,16,16,128)$ fp32 $= 131072\,\mathrm{B}$，加上 `mp`/`lp` 各 $(1,16,16)$ fp32 = 1 KB。写一遍读一遍共约 262 KB，占 134.2 MB 的 **0.2%**——**split-K 的额外流量在长上下文上完全可以忽略，这正是它在长上下文划算的结构性原因**。反过来在 512 那格：KV 只有 2.1 MB，262 KB 占 12%，再加上多一次 launch，划不来就是必然。
 
-**短上下文反亏 0.86-0.88× 的机理账**：fd 在 512/2048/8192 三格几乎不变（0.0907 / 0.0941 / 0.0918 ms），naive 同段也平（0.0779 / 0.0816 / 0.0804）。**两条线都平，说明这一段的时间根本不在设备上**，都是主机侧地板：fd 每次要发 2 次 Triton launch (partial + combine)，naive 是 3 个 torch 算子但走 C++ 分发，而同机实测的分发成本是 Triton eager $36.2\pm0.1\，\mu s$ vs torch $8.03\pm0.74\，\mu s$（EXP-T05《CUDA Graph 消 launch 开销实测》3 轮）。所以 0.86-0.88 是**两条地板之比，与 KV 长度无关**——不是算法输了，是这一档 launch 口径输了。正解在讲义 03：CUDA Graph 把 launch 塌缩 11.6×。
+**短上下文反亏 0.86-0.88× 的机理账**：fd 在 512/2048/8192 三格几乎不变（0.0907 / 0.0941 / 0.0918 ms），naive 同段也平（0.0779 / 0.0816 / 0.0804）。**两条线都平，说明这一段的时间根本不在设备上**，都是主机侧地板：fd 每次要发 2 次 Triton launch (partial + combine)，naive 是 3 个 torch 算子但走 C++ 分发，而同机实测的分发成本是 Triton eager $36.2\pm0.1\,\mu s$ vs torch $8.03\pm0.74\,\mu s$（EXP-T05《CUDA Graph 消 launch 开销实测》3 轮）。所以 0.86-0.88 是**两条地板之比，与 KV 长度无关**——不是算法输了，是这一档 launch 口径输了。正解在讲义 03：CUDA Graph 把 launch 塌缩 11.6×。
 
 **把这条推断量化到可证伪的程度**（本讲义推导）：若时间全在主机侧，则 fd/naive $\approx (2\times T_{\text{triton}})/(3\times T_{\text{torch}}) = (2\times36.2)/(3\times8.03) = 72.4/24.1 = 3.0$——**这与实测的 1.16(= 1/0.86) 差得远**。所以"纯主机侧地板"这个解释是**过强的**：真实情况是 fd 的两次 launch 与设备侧执行有重叠（§2 的 $\max$ 而非 $\sum$，讲义 03 §2），而 naive 的三个 torch 算子各自的设备时间也不为零。诚实的结论只能是：**这一段两条线都平、都不随 KV 长度变化， 说明设备侧不是瓶颈；但精确的归因需要设备侧计时，本仓没做。** 把一个方向正确的推断写成"约等于两条地板之比"是过度自信，这里改成"同一层的两个常数之比，具体配比未隔离"。
 
@@ -736,7 +736,7 @@ data/derived/exp-t04_stability_3rounds.csv（3 轮，协议 B1·Hq16/Hkv8·D128�
 至少踩过一次才写得出来的错误直觉（第 3 条是本仓自己被证伪的假设）：
 
 1. **"FA 把 HBM 流量降到 $O(S\cdot D)$"**——半对，而且连"半"都要修正。Theorem 2 给的是 $\Theta(N^2d^2M^{-1})$，不是 $\Theta(Nd)$。被消掉的是不可缓存的 $S\times S$ 写回；K/V 仍被 $S/\mathrm{BM}$ 个 Q 行块各读一遍（§3.3.3 的三口径夹逼：83.9 MB / 268 MB / 1.07 GB）。正确的调优方向是"BM 越大重读越少"，这才和实测的 BM 64→128 +17% 对得上。
-2. **"S=512 那格 88%，说明小序列上我们也接近官方"**——错。0.0390 ms 恰是同机实测的 Triton 每调用 launch 地板（$36.2\pm0.1\，\mu s$，EXP-T05），kernel 本体被盖住， **该点的 kernel 级差距在本仓协议下不可测**；要测就得先上 CUDA Graph 或改用设备侧计时。
+2. **"S=512 那格 88%，说明小序列上我们也接近官方"**——错。0.0390 ms 恰是同机实测的 Triton 每调用 launch 地板（$36.2\pm0.1\,\mu s$，EXP-T05），kernel 本体被盖住， **该点的 kernel 级差距在本仓协议下不可测**；要测就得先上 CUDA Graph 或改用设备侧计时。
 3. **"flash-decoding 总比 naive 快"**——**被本仓自己的复测证伪**。EXP-T04 §5 原表里 Skv ≤ 8192 的各行已全部作废（未存脚本的混合口径，不可复现），3 轮实测是 **0.86-0.88× 的反亏**——它的正确定位是**长上下文武器**。方法论提炼：**旧数字不可复现时，作废它比解释它更诚实**；拆成三臂口径后，同一批数据同时给出了"反亏"与 "5.17×"两个真相。
 4. **"online softmax 是近似算法"**——不是。换基是精确恒等式（§3.2），误差只来自浮点舍入：flash_decode 在 Skv=512/2048 两格与 fp32 精算的 max abs err **恰为 0.0** (data/raw/EXP-T04/20260825T152434_flash_decode_stability_r1.json)，32K 也只有 6.1e-5。
 5. **"decode 用同一个 FA2 kernel 就行"**——不行。$S_q=1$ 时 M 维 tile 全废，grid 塌成 $B\cdot H_q$(§3.6)，且 `mma` 的 M 维粒度是 16、pad 之后 15/16 的 tensor core 算力空转。换并行轴不是优化，是换算法结构。
@@ -749,9 +749,9 @@ data/derived/exp-t04_stability_3rounds.csv（3 轮，协议 B1·Hq16/Hkv8·D128�
 ## 7. 连环追问
 
 1. **Q：softmax 减 max 是为了精度还是为了不溢出？** 为了不溢出——减 max 在实数域上是**精确恒等式**（§3.1.1 第 2 步），顺带保证分母 $\ge1$、不出现 $0/0$。fp16 的溢出线只有 $x>11.09$，真实模型的 attention logits 轻易越过它，这不是理论洁癖。追问一层：为什么不换 bf16？bf16 阈值是 88.72， 确实安全得多，但那是指数位数带来的，不是精度；而且换 dtype 不能解决"存在会炸的输入"这个一般问题（§2.4）。
-2. **Q：分块之后为什么还能算对？** 因为 $e^{s-m'}=e^{s-m}e^{m-m'}$，换基因子与求和下标无关、可提到求和号外；于是 "旧部分量乘一个标量"就换到新基准，合并退化为普通加法（§3.2）。更严格的说法： $(m，l，\mathrm{acc})$ 在 $\oplus$ 下构成**交换幺半群**，所以任意分块与任意归并顺序给出同一结果。
+2. **Q：分块之后为什么还能算对？** 因为 $e^{s-m'}=e^{s-m}e^{m-m'}$，换基因子与求和下标无关、可提到求和号外；于是 "旧部分量乘一个标量"就换到新基准，合并退化为普通加法（§3.2）。更严格的说法： $(m,l,\mathrm{acc})$ 在 $\oplus$ 下构成**交换幺半群**，所以任意分块与任意归并顺序给出同一结果。
 3. **Q：为什么最后才除 $l$？** 先除就丢了 $l_p$ 权重，合并要写成加权平均、$l_p$ 还得带着走（§3.2.3）——"最后再除" 是可归并性的自然形式。代码落点 src/fa2_fwd.py：125。FA2 论文 §3.1 把它写成 "maintain an 'un-scaled' version of $O^{(2)}$"。
-4. **Q：FlashAttention 的定理到底证明了什么？** 三条：Theorem 1 说算法正确且额外内存 $O(N)$、FLOPs 仍是 $O(N^2d)$（**没省算力**）； Theorem 2 说 HBM 访问从 $\Theta(Nd+N^2)$ 降到 $\Theta(N^2d^2M^{-1})$； Proposition 3 说在 $M\in[d，Nd]$ 上不存在渐进更优的精确算法。**下界那条才是这篇论文与普通优化工作的分界。**
+4. **Q：FlashAttention 的定理到底证明了什么？** 三条：Theorem 1 说算法正确且额外内存 $O(N)$、FLOPs 仍是 $O(N^2d)$（**没省算力**）； Theorem 2 说 HBM 访问从 $\Theta(Nd+N^2)$ 降到 $\Theta(N^2d^2M^{-1})$； Proposition 3 说在 $M\in[d,Nd]$ 上不存在渐进更优的精确算法。**下界那条才是这篇论文与普通优化工作的分界。**
 5. **Q：FA2 相对 FA1 改了什么？** 论文列三条（§3.1/§3.2/§3.3）：减少非 matmul FLOPs、seq 维并行、warp 间改用 split-Q。本仓实现了前两条，第三条交给 Triton 编译器——这正是 §5.1 那段抽象税的一部分（§3.4.1 的表）。补一句机制：循环反转让三元组常驻寄存器，省掉 FA1 那笔与 $S^2$ 同量级的中间量往返（§3.4.2 的 136 MB 算式）。
 6. **Q：GQA 在 kernel 里改了几行？收益从哪来？** 一行 `hkv = hq // GQA_GROUP`(src/fa2_fwd.py：55)。收益是 KV 读取量按 $H_{kv}/H_q$ 缩小且**不物化 repeat**——这份"免掉的拷贝"在 EXP-T04 里被单独标价（2.24× 与 5.17× 的差就是它）。诚实补充：EXP-T01 里没有 MHA 对照臂，所以 "GQA 省了多少"在那个实验里**测不出来**。
 7. **Q：你的 87% 具体差在哪一层？** 算力利用率 74% vs 85%（§5.1 机理账），不是算法差异；缺口在 tensor-core 布局微调、 cp.async 双缓冲、warp 专业化（论文 §3.3 的 split-Q）。本仓立场：讲得清的 87% 好过讲不清的 100%。
@@ -772,13 +772,13 @@ data/derived/exp-t04_stability_3rounds.csv（3 轮，协议 B1·Hq16/Hkv8·D128�
 
 | # | 来源与声称 | 本仓实测（EXP 锚） | 差异分析 |
 |---|---|---|---|
-| 1 | online softmax（arXiv：1805.02867 摘要）："Softmax accelerates by up to 1.3x and Softmax+TopK combined and fused by up to 5x" | 本仓无"向量 softmax 三趟 vs 一趟"对照臂，**无法验证** | 论文测的是独立的 softmax 算子；本仓的 online softmax 嵌在 attention 里，省掉的是 $S\times S$ 而不是一趟向量读。**同一算法在两个上下文里收益差两个数量级**(§3.1.4)，1.3× 这个数不能引到本仓 |
+| 1 | online softmax（arXiv:1805.02867 摘要）："Softmax accelerates by up to 1.3x and Softmax+TopK combined and fused by up to 5x" | 本仓无"向量 softmax 三趟 vs 一趟"对照臂，**无法验证** | 论文测的是独立的 softmax 算子；本仓的 online softmax 嵌在 attention 里，省掉的是 $S\times S$ 而不是一趟向量读。**同一算法在两个上下文里收益差两个数量级**(§3.1.4)，1.3× 这个数不能引到本仓 |
 | 2 | FlashAttention Theorem 2：HBM 访问 $\Theta(N^2d^2M^{-1})$ | 本仓未测 HBM 计数器（无权限）；按 tile 模型推得三口径 83.9 MB / 268 MB / 1.07 GB(§3.3.3) | 定理是**渐进阶**，常数被 $\Theta$ 吸收，无法用来预测具体字节数；本仓的三口径夹逼与"算力占 74%"一致。**定理不可证伪于单点实测，这是理论与实验的正常关系，不是矛盾** |
-| 3 | FlashAttention 论文：A100 SRAM 192 KB/SM、带宽约 19 TB/s | RTX 4090：每 SM 100 KB shared（每 block 上限 99 KB）、L1/shared 合计 128 KB/SM(Ada Tuning Guide §1.4.1.1/§1.4.2.2) | **代际差**：Ada 的片上预算比 A100 小近一半，所以论文按 $M\approx$192 KB 推的块大小在 4090 上要缩。本仓 BN=128 的 OOM 正是这个代际差的直接后果 |
+| 3 | FlashAttention 论文：A100 SRAM 192 KB/SM、带宽约 19 TB/s | RTX 4090：每 SM 100 KB shared（每 block 上限 99 KB）、L1/shared 合计 128 KB/SM(Ada Tuning Guide §1.4.1.1/§1.4.2.2) | **代际差**：Ada 的片上预算比 A100 小近一半，所以论文按 $M\approx$ 192 KB 推的块大小在 4090 上要缩。本仓 BN=128 的 OOM 正是这个代际差的直接后果 |
 | 4 | FlashAttention-2 摘要："around 2× speedup compared to FlashAttention， reaching 50-73% of the theoretical maximum FLOPs/s on A100" | 本仓 FA2 简化版在 4090 上达 **74%** 峰值（122.9/165.2，EXP-T01 3 轮） | **数字接近但不可直接比**：论文的 50-73% 是 A100 官方 CUDA 实现在多形状上的区间，本仓是 4090 单形状的 Triton 简化版。落在同一区间是巧合级的一致，不能当作"追平官方"的证据 |
 | 5 | FlashAttention-2 §3.3：FA2 改用 split-Q，"split Q across 4 warps while keeping K and V accessible by all warps" | 本仓**未实现**，warp 级划分交给 Triton | 这是本仓与官方实现差距的一个已知来源（§5.1 的"抽象税"）。**能指出自己缺哪一条，好过笼统说"实现没那么优化"** |
 | 6 | FlashAttention-2：A100 matmul 312 vs 非 matmul 19.5 TFLOPs/s，比值 16× | 4090 上按白皮书 Table 2 算是 165.2 / 82.6 = **2.0×**（本讲义推导） | **代际差**：Ada 每 SM 128 条 FP32 通道，非 matmul 相对不那么贵。推论是"省非 matmul FLOPs"在 Ada 上边际收益更小——**但本仓没做关掉该优化的对照，标为推断** |
-| 7 | flash-decoding 官方博客："up to 8x faster generation for very long sequences"，微基准 B=1/seqlen=65536 时 FA2 2300.6 µs vs Flash-Decoding 64.4 µs | 本仓 32K 上 **2.24×（repeat 预置）/ 5.17×（含 repeat）**；$S_{kv}\le$8K 反而 **0.86-0.88×** | **对照物完全不同**：博客的分母是 FlashAttention v2 的 decode 路径，本仓的分母是 naive torch attention；博客的机器是 A100、序列到 128K。**"8×"与"5.17×"不是同一个量的两次测量**。短上下文反亏在博客里没有出现，因为它没测那一段 |
+| 7 | flash-decoding 官方博客："up to 8x faster generation for very long sequences"，微基准 B=1/seqlen=65536 时 FA2 2300.6 µs vs Flash-Decoding 64.4 µs | 本仓 32K 上 **2.24×（repeat 预置）/ 5.17×（含 repeat）**；$S_{kv}\le$ 8K 反而 **0.86-0.88×** | **对照物完全不同**：博客的分母是 FlashAttention v2 的 decode 路径，本仓的分母是 naive torch attention；博客的机器是 A100、序列到 128K。**"8×"与"5.17×"不是同一个量的两次测量**。短上下文反亏在博客里没有出现，因为它没测那一段 |
 | 8 | flash-decoding 官方博客：batch size 1 时 FlashAttention "will use less than 1% of the GPU" | 本仓 decode grid = $B H_q$ = 16 个 program 对 128 SM = **12.5%** | **分母定义不同**：博客说的是 batch 维塌陷后的整体占用；本仓把 head 维也算进 program 数。机制同一个，数字差一个量级——**引用时必须说清分子分母** |
 | 9 | Triton 文档（`triton.Config`）："num_stages： the number of stages that the compiler should use when software-pipelining loops. Mostly useful for matrix multiplication workloads on SM80+ GPUs"；`tl.range` 文档："pipeline the loop into this many stages (so there are num_stages iterations of the loop in flight at once)" | EXP-T08 编译期探针：缓冲份数 = **max(1， num_stages − 1)**，故 stages=2 只有 1 份缓冲 | **文档描述的是"在飞的迭代数"，不是"缓冲份数"**；两者相差 1 是流水线的正常结构（消费中的那一级不额外占一份预取缓冲）。本仓的探针把这条差异量化了，讲义 02 §3.3 讲透。这不是文档错，是**读者容易把两个量当成一个** |
 | 10 | Ada Tuning Guide §1.4.1.1："The maximum shared memory per thread block is 99 KB" | EXP-T08 逐字复现编译器报错 `Required 163840, Hardware limit 101376`，101376 = 99×1024 | **文档 → 实测完全闭合**，本篇唯一一条严格的"预言—证实"链。文档只给上限，本仓把撞墙那一刻的字节数也钉死了 |
@@ -790,7 +790,7 @@ data/derived/exp-t04_stability_3rounds.csv（3 轮，协议 B1·Hq16/Hkv8·D128�
 ### 8.2 与生产实现的差距各在哪一层
 
 - **官方 FlashAttention(CUDA)**：算法同构，差在实现层——tensor-core 的 swizzle/布局微调、cp.async 双缓冲、warp 专业化（论文 §3.3 的 split-Q，producer/consumer 分工）。本仓把这三层交给 Triton 编译器，代价就是 §5.1 里那段算力利用率差。
-- **FlashAttention-3(arXiv：2407.08608)**：Hopper 专属的下一代，靠 "asynchrony of the Tensor Cores and TMA"做 warp 专业化、把 matmul 与 softmax 交错、并加 FP8 的 block quantization；报的是 H100 上 FP16 740 TFLOPs/s（75% 利用率）。 **本仓的 Ada(sm_89)没有 TMA、没有 wgmma，这条路整条走不了**——不是没做，是硬件代际不支持（界线见讲义 02 §3.5）。
+- **FlashAttention-3(arXiv:2407.08608)**：Hopper 专属的下一代，靠 "asynchrony of the Tensor Cores and TMA"做 warp 专业化、把 matmul 与 softmax 交错、并加 FP8 的 block quantization；报的是 H100 上 FP16 740 TFLOPs/s（75% 利用率）。 **本仓的 Ada(sm_89)没有 TMA、没有 wgmma，这条路整条走不了**——不是没做，是硬件代际不支持（界线见讲义 02 §3.5）。
 - **vLLM paged attention**：本 kernel 的数学 + block table 间接寻址。本仓 K/V 指针是连续 stride 寻址（src/fa2_fwd.py：87-90），paged 版换成"先查页表再算页内偏移"， 数学一行不改。
 - **vLLM / SGLang 的 decode kernel**：paged 读 + split 归并的合体，本仓 flash_decode 只做后半。两者正交：paged 解决"KV 在哪"，flash-decoding 解决"并行度从哪来"。
 - **splits 的选择**：官方 flash-decoding 博客说 "the number of splits determined by a heuristic at launch"；本仓的启发式（§3.6.2）形式相近但**未扫参**，而且把 SM 数硬编码成 128。生产实现会读设备属性并按 batch/seqlen 查表。
@@ -808,13 +808,13 @@ data/derived/exp-t04_stability_3rounds.csv（3 轮，协议 B1·Hq16/Hkv8·D128�
 
 **论文**
 
-1. Milakov & Gimelshein， "Online normalizer calculation for softmax"， arXiv：1805.02867，Algorithm 3 与 Theorem 1。——想看"三趟压成一趟"的原始递推式与它的归纳法证明（本篇 §3.1.3 补出的中间步就是照着这里补的），读这两处。
-2. Dao， Fu， Ermon， Rudra， Ré， "FlashAttention： Fast and Memory-Efficient Exact Attention with IO-Awareness"， arXiv：2205.14135，Theorem 1、Theorem 2、 Proposition 3、Algorithm 1（块大小 $B_c=\lceil M/4d\rceil$）。——想弄清 "FlashAttention 到底证明了什么、下界为什么重要、块大小里那个 4 从哪来"，读这四处。
+1. Milakov & Gimelshein， "Online normalizer calculation for softmax"， arXiv:1805.02867，Algorithm 3 与 Theorem 1。——想看"三趟压成一趟"的原始递推式与它的归纳法证明（本篇 §3.1.3 补出的中间步就是照着这里补的），读这两处。
+2. Dao， Fu， Ermon， Rudra， Ré， "FlashAttention： Fast and Memory-Efficient Exact Attention with IO-Awareness"， arXiv:2205.14135，Theorem 1、Theorem 2、 Proposition 3、Algorithm 1（块大小 $B_c=\lceil M/4d\rceil$）。——想弄清 "FlashAttention 到底证明了什么、下界为什么重要、块大小里那个 4 从哪来"，读这四处。
 3. Dao, "FlashAttention-2: Faster Attention with Better Parallelism and Work Partitioning", arXiv:2307.08691,§3.1 Algorithm、§3.2 Parallelism、 §3.3 Work Partitioning Between Warps。——想知道"循环反转具体改了哪三处""为什么非 matmul FLOPs 值 16 倍""split-K 与 split-Q 差在哪"，读这三节。
-4. Rabe & Staats， "Self-attention Does Not Need $O(n^2)$ Memory"， arXiv：2112.05682。——想知道 online softmax 用到 attention 上的最早形态，以及 "内存 $O(\log n)$"与"HBM 访问 $\Theta(N^2d^2M^{-1})$"是两个不同的目标函数，读它。
-5. Shah， Bikshandi， Zhang， Thakkar， Ramani， Dao， "FlashAttention-3： Fast and Accurate Attention with Asynchrony and Low-precision"， arXiv：2407.08608。——想知道 "为什么 Ada 上这条路走不了"以及 warp 专业化 + TMA 能再拿多少（H100 FP16 740 TFLOPs/s、75% 利用率），读它。
+4. Rabe & Staats， "Self-attention Does Not Need $O(n^2)$ Memory"， arXiv:2112.05682。——想知道 online softmax 用到 attention 上的最早形态，以及 "内存 $O(\log n)$"与"HBM 访问 $\Theta(N^2d^2M^{-1})$"是两个不同的目标函数，读它。
+5. Shah， Bikshandi， Zhang， Thakkar， Ramani， Dao， "FlashAttention-3： Fast and Accurate Attention with Asynchrony and Low-precision"， arXiv:2407.08608。——想知道 "为什么 Ada 上这条路走不了"以及 warp 专业化 + TMA 能再拿多少（H100 FP16 740 TFLOPs/s、75% 利用率），读它。
 6. Ainslie, Lee-Thorp, de Jong, Zemlyanskiy, Lebrón, Sanghai, "GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints", arXiv:2305.13245。——想回答"GQA 是带宽优化还是质量折中""从 MHA checkpoint 转过来要多少算力"，读它。
-7. Vaswani et al.， "Attention Is All You Need"， arXiv：1706.03762，§3.2.1 及其脚注。——$1/\sqrt{d_k}$ 的方差论证，本仓 `sm_scale` 默认值的唯一理论出处。
+7. Vaswani et al.， "Attention Is All You Need"， arXiv:1706.03762，§3.2.1 及其脚注。——$1/\sqrt{d_k}$ 的方差论证，本仓 `sm_scale` 默认值的唯一理论出处。
 8. Williams, Waterman & Patterson, "Roofline: an insightful visual performance model for multicore architectures", CACM 52(4):65-76, DOI:10.1145/1498765.1498785。——想把"算术强度 2.0 对 ops:byte 164"这类判断放进一个统一框架，读它。
 
 **官方文档**

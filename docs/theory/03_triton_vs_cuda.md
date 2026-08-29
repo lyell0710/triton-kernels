@@ -18,7 +18,7 @@ status: 完成(实证=EXP-T03《三件套移植 + torch 绑定》)
 3. **假设二（坐实）**：尺寸三点法。8×8（纯开销）37.4µs ≈ 1024² 的 37.6µs → 时间根本不在 kernel 里；8192²（带宽主导）917 vs 922 GB/s 打平 → 设备侧没有差距。开销拆解：Triton 每次调用过 Python 包装（参数处理/JIT 缓存查找/grid 计算）+ wrapper 里的 empty 分配。
 
 **结论怎么用**（选型准则）：
-- 大 kernel / 长序列 / 融合机会多 → Triton 白给(FA2 87% 效率（EXP-T01《Triton FA2 forward》），GEMM 打平（EXP-T02《流水线 GEMM》）)；
+- 大 kernel / 长序列 / 融合机会多 → Triton 白给（FA2 87% 效率（EXP-T01《Triton FA2 forward》），GEMM 打平（EXP-T02《流水线 GEMM》））；
 - 微 kernel 高频调用 → 裸 CUDA/C++ 扩展，或 CUDA Graph 把 launch 摊平（vLLM 正是用 CUDA Graph 吃掉 decode 的 launch 海——与 vllm/experiments#EXP-014《D1 MoE decode 分解》的 graph-trace 陷阱同根）；
 - torch 集成层：**融合数（launch 数）比单 kernel 快慢更重要**—— CUDA v4 kernel 快 10×，套上 3 个 scale 前置 launch 后端到端反输。
 

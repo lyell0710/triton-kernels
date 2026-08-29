@@ -36,7 +36,7 @@
 
 ## 1. 这一篇回答什么问题
 
-"GEMM 要做双缓冲"这句话在教科书里是结论，在本仓是一个**被实测打了折的假设**： 同一个 kernel 只改 `num_stages`，2 级只带来 +1%，3 级才 +20%。而这一篇的核心增量是： **用编译期资源探针把"2 级到底是不是双缓冲"这个前提问题查清楚了**——在本机的 Triton 3.6 上，缓冲份数 = $\max(1， \text{num\_stages}-1)$，所以 `num_stages=2` **根本没有开出第二份缓冲**。"双缓冲只值 1%"这个读法是错的；正确读法是 "那一档还不是双缓冲，真双缓冲是 stages=3，它值 +20%"（EXP-T08《num_stages 与 shared memory 份数的映射》）。
+"GEMM 要做双缓冲"这句话在教科书里是结论，在本仓是一个**被实测打了折的假设**： 同一个 kernel 只改 `num_stages`，2 级只带来 +1%，3 级才 +20%。而这一篇的核心增量是： **用编译期资源探针把"2 级到底是不是双缓冲"这个前提问题查清楚了**——在本机的 Triton 3.6 上，缓冲份数 = $\max(1, \text{num\_stages}-1)$，所以 `num_stages=2` **根本没有开出第二份缓冲**。"双缓冲只值 1%"这个读法是错的；正确读法是 "那一档还不是双缓冲，真双缓冲是 stages=3，它值 +20%"（EXP-T08《num_stages 与 shared memory 份数的映射》）。
 
 读完你应当能：
 
@@ -62,7 +62,7 @@
 | BM / BN / BK | tile 三维 | 128 / 128 / 64（fp16 路线） |
 | GROUP_M | grouped 调度的组高 | 8 |
 | $N_s$ | `num_stages` | 扫 1..4 |
-| $\beta$ | 缓冲份数（编译器实际分配） | $\max(1， N_s-1)$（EXP-T08 实测） |
+| $\beta$ | 缓冲份数（编译器实际分配） | $\max(1, N_s-1)$（EXP-T08 实测） |
 | $\pi_{\text{math}}$ | fp16 tensor core / fp32 累加峰值 | 165.2 TFLOPS（非稀疏） |
 | $\pi_{\text{math}}^{\text{fp8}}$ | fp8 tensor core / fp32 累加峰值 | 330.3 TFLOPS（非稀疏） |
 | $\pi_{\text{math}}^{\text{fp32}}$ | 非 Tensor 的 FP32 峰值 | 82.6 TFLOPS |
@@ -84,9 +84,9 @@
 
 ### 2.1 三层算术强度:同一个 GEMM,三个数
 
-**第一层，朴素**：$C = AB$，每个输出元素读 $A$ 的一行和 $B$ 的一列。每个输出 $2K$ 次 FLOP、读 $2K$ 个元素（$4K$ 字节，fp16），算术强度 $$I_{\text{naive}} = \frac{2K}{4K} = 0.5\ \text{FLOP/Byte}$$ 4090 的机器平衡点是 $165.2\，\mathrm{TFLOPS} / 1008\，\mathrm{GB/s} \approx 164$ FLOP/Byte（ops：byte 的定义见 NVIDIA GPU Performance Background User's Guide §4： "the ratio of a processor's math and memory bandwidths"）。$0.5 \ll 164$，意味着算力只能吃到峰值的 $0.5/164 \approx 0.3\%$——**GEMM 的第一堵墙从来不是算力， 是访存。**
+**第一层，朴素**：$C = AB$，每个输出元素读 $A$ 的一行和 $B$ 的一列。每个输出 $2K$ 次 FLOP、读 $2K$ 个元素（$4K$ 字节，fp16），算术强度 $$I_{\text{naive}} = \frac{2K}{4K} = 0.5\ \text{FLOP/Byte}$$ 4090 的机器平衡点是 $165.2\,\mathrm{TFLOPS} / 1008\,\mathrm{GB/s} \approx 164$ FLOP/Byte（ops：byte 的定义见 NVIDIA GPU Performance Background User's Guide §4： "the ratio of a processor's math and memory bandwidths"）。$0.5 \ll 164$，意味着算力只能吃到峰值的 $0.5/164 \approx 0.3\%$——**GEMM 的第一堵墙从来不是算力， 是访存。**
 
-**第二层，每 CTA 的 tile**：改成每个 CTA 算一块 $\mathrm{BM}\times\mathrm{BN}$ 的 $C$，沿 K 维流式读入。这块 $C$ 需要 $\mathrm{BM}\times K$ 的 A 与 $K\times\mathrm{BN}$ 的 B，做 $2\cdot\mathrm{BM}\cdot\mathrm{BN}\cdot K$ 次 FLOP: $$I_{\text{tile}} = \frac{2\,\mathrm{BM}\,\mathrm{BN}\,K}{2(\mathrm{BM}+\mathrm{BN})K} = \frac{\mathrm{BM}\cdot\mathrm{BN}}{\mathrm{BM}+\mathrm{BN}}$$ 本仓默认 $128\times128$ 给出 **64 FLOP/Byte**。注意：64 仍然小于机器平衡点 164。
+**第二层，每 CTA 的 tile**：改成每个 CTA 算一块 $\mathrm{BM}\times\mathrm{BN}$ 的 $C$，沿 K 维流式读入。这块 $C$ 需要 $\mathrm{BM}\times K$ 的 A 与 $K\times\mathrm{BN}$ 的 B，做 $2\cdot\mathrm{BM}\cdot\mathrm{BN}\cdot K$ 次 FLOP： $$I_{\text{tile}} = \frac{2\,\mathrm{BM}\,\mathrm{BN}\,K}{2(\mathrm{BM}+\mathrm{BN})K} = \frac{\mathrm{BM}\cdot\mathrm{BN}}{\mathrm{BM}+\mathrm{BN}}$$ 本仓默认 $128\times128$ 给出 **64 FLOP/Byte**。注意：64 仍然小于机器平衡点 164。
 
 **第三层，整个问题**：NVIDIA 的矩阵乘指南给的公式是 $M\cdot N\cdot K / (M\cdot K + N\cdot K + M\cdot N)$（"Matrix Multiplication Background User's Guide"，"Arithmetic Intensity" 小节）。代入 square4k： $$I_{\text{problem}} = \frac{4096^3}{3\times4096^2} = \frac{4096}{3} \approx 1365\ \text{FLOP/Byte}$$（这个公式的分子是 MAC 数、分母是元素数；换算成 FLOP/Byte 时分子乘 2、分母乘 2 B， 比值不变——**这是一个恰好与数据类型无关的量，fp16 与 fp32 给同一个数**，本讲义推导。）
 
@@ -98,7 +98,7 @@
 | 每 CTA tile | 64 | < | 若每个 tile 都真的从 HBM 拿，仍然带宽受限 |
 | 整问题 | 1365 | ≫ | 若缓存层级把重读全接住，算力受限 |
 
-实测落在第三层（§3.1 的账）：**tile 的任务不是把强度抬到 164 以上，而是抬到 "L2 能接手"的程度**。反推一下"要靠 HBM 单独吃满算力需要多大的方 tile"： $b/2 \ge 164 \Rightarrow b\ge328$，而仅累加器就要 $328^2\times4\，\mathrm{B} \approx 430\，\mathrm{KB}$ 每 CTA——对照 Ada 每 block 99 KB shared、每 SM 64K 寄存器，**寄存器和 shared memory 根本装不下**。所以 "靠 tile 单独解决问题"这条路在硬件上是封死的，不是没人想到。
+实测落在第三层（§3.1 的账）：**tile 的任务不是把强度抬到 164 以上，而是抬到 "L2 能接手"的程度**。反推一下"要靠 HBM 单独吃满算力需要多大的方 tile"： $b/2 \ge 164 \Rightarrow b\ge328$，而仅累加器就要 $328^2\times4\,\mathrm{B} \approx 430\,\mathrm{KB}$ 每 CTA——对照 Ada 每 block 99 KB shared、每 SM 64K 寄存器，**寄存器和 shared memory 根本装不下**。所以 "靠 tile 单独解决问题"这条路在硬件上是封死的，不是没人想到。
 
 ### 2.2 重叠为什么必须显式安排
 
@@ -136,7 +136,7 @@ grouped 调度（src/gemm_pipelined.py：41-53）把线性 pid 重映射成"先�
 1. 大部分重读根本没走到 HBM。4096² fp16 的 A、B 各 33.55 MB，合计 67.1 MB； RTX 4090 的 L2 是 73728 KB（Ada 白皮书 Table 2），**两个操作数整体装得进 L2**。这既解释了 grouped 调度为什么值钱，也提醒你：**这个形状的数字自带"操作数进得了 L2"这个前提**，换成权重远大于 L2 的形状，访存账要重算（推断，本仓未测该形状族）。
 2. 实测 0.8566 ms 对算力下界 0.832 ms 的比值是 1.029，即**这个 kernel 已经吃到 roofline 算力边的 97%**，与 kperf 卡片"算力 98%"逐点吻合（终端级证据，登记于 EXP-T06《FP8 GEMM》§7）。剩余空间不足 3%，这是本仓不再往下扫 BM/BN/BK 全空间的定量理由（EXP-T02 §7 如实列为未做项）。
 
-上界那个 2.15 GB 还可以换一种算法核对（与上表独立）：每 CTA 每轮载入 $(\mathrm{BM}+\mathrm{BN})\times\mathrm{BK}\times2\，\mathrm{B} = 256\times64\times2 = 32\ \mathrm{KB}$；CTA 数 $= (4096/128)^2 = 1024$，轮数 $= K/\mathrm{BK} = 64$； $1024\times64\times32\，\mathrm{KB} = 2.15\ \mathrm{GB}$。在 0.8566 ms 内完成 → **聚合 2.5 TB/s**，是 HBM 峰值的 2.5 倍。这个 2.5 TB/s 只能由 L2 供给； 本仓**没有测过 4090 的 L2 实际带宽**，所以"2.5 TB/s 在 L2 能力之内"这句标为未核实， 只能说"它超过 HBM 峰值，故必然主要来自片上"。
+上界那个 2.15 GB 还可以换一种算法核对（与上表独立）：每 CTA 每轮载入 $(\mathrm{BM}+\mathrm{BN})\times\mathrm{BK}\times2\,\mathrm{B} = 256\times64\times2 = 32\ \mathrm{KB}$；CTA 数 $= (4096/128)^2 = 1024$，轮数 $= K/\mathrm{BK} = 64$； $1024\times64\times32\,\mathrm{KB} = 2.15\ \mathrm{GB}$。在 0.8566 ms 内完成 → **聚合 2.5 TB/s**，是 HBM 峰值的 2.5 倍。这个 2.5 TB/s 只能由 L2 供给； 本仓**没有测过 4090 的 L2 实际带宽**，所以"2.5 TB/s 在 L2 能力之内"这句标为未核实， 只能说"它超过 HBM 峰值，故必然主要来自片上"。
 
 #### 3.1.2 波量化:两个测试形状都恰好整波(本讲义推导)
 
@@ -151,7 +151,7 @@ NVIDIA 的矩阵乘指南把"一波"定义为同时执行的最大 thread block 
 
 ### 3.2 为什么 2 级"双缓冲"只 +1%:先别急着解释,先查前提
 
-主循环每轮做两件事（§2.2）。串行执行时 tensor core 在等数；重叠的收益上限是 $$\text{省下的时间} \le \min（T_{\text{搬运}}，\ T_{\text{计算}}）$$ 教科书默认 $T_{\text{搬运}} \ll T_{\text{计算}}$，于是"两块缓冲交替"就够把搬运整段藏进计算——这就是经典双缓冲的适用前提。
+主循环每轮做两件事（§2.2）。串行执行时 tensor core 在等数；重叠的收益上限是 $$\text{省下的时间} \le \min(T_{\text{搬运}},\ T_{\text{计算}})$$ 教科书默认 $T_{\text{搬运}} \ll T_{\text{计算}}$，于是"两块缓冲交替"就够把搬运整段藏进计算——这就是经典双缓冲的适用前提。
 
 **本仓的数据看上去否证了这个默认前提**(EXP-T02,4096³ fp16)：
 
@@ -189,7 +189,7 @@ Triton 的官方描述有两处，本机 3.6.0 源码里可以逐字核对：
 
 #### 3.3.2 编译期资源探针:不跑 bench 就把份数读出来
 
-EXP-T08 的做法是编译一次、读 `CompiledKernel.metadata.shared`，完全不产生时延数字。 **假设在跑之前锁定**：若 `num_stages=N` 分配 N 份缓冲，则 $\text{smem}(N) = N \times 32\，\mathrm{KB}$；**证伪条件**：若 $\text{smem}(2) = \text{smem}(1)$，假设被证伪。
+EXP-T08 的做法是编译一次、读 `CompiledKernel.metadata.shared`，完全不产生时延数字。 **假设在跑之前锁定**：若 `num_stages=N` 分配 N 份缓冲，则 $\text{smem}(N) = N \times 32\,\mathrm{KB}$；**证伪条件**：若 $\text{smem}(2) = \text{smem}(1)$，假设被证伪。
 
 单份 tile 的字节数先算清楚：$(\mathrm{BM}+\mathrm{BN})\times\mathrm{BK}\times2\,\mathrm{B} = (128+128)\times64\times2 = 32768\,\mathrm{B} = 32\,\mathrm{KB}$。
 
@@ -202,7 +202,7 @@ EXP-T08 的做法是编译一次、读 `CompiledKernel.metadata.shared`，完全
 | 3 | 65536 (64 KB) | 2 | 170 | 0 |
 | 4 | 98304 (96 KB) | 3 | 178 | 0 |
 
-**假设被证伪。** 实测映射是 $$\beta = \max(1，\ N_s - 1)$$ 同一映射在 FA2 kernel 上也成立（§3.3.4），六格逐格吻合——**两个结构完全不同的 kernel 给出同一条映射，这不是巧合**。
+**假设被证伪。** 实测映射是 $$\beta = \max(1,\ N_s - 1)$$ 同一映射在 FA2 kernel 上也成立（§3.3.4），六格逐格吻合——**两个结构完全不同的 kernel 给出同一条映射，这不是巧合**。
 
 #### 3.3.3 差 1 是怎么来的:流水线的正常结构,不是文档错
 
@@ -210,11 +210,11 @@ EXP-T08 的做法是编译一次、读 `CompiledKernel.metadata.shared`，完全
 
 一条 $N_s$ 级软件流水在稳态时，确实有 $N_s$ 个迭代"在飞"，但它们处在不同阶段： **其中一个迭代正在被 `tl.dot` 消费**，其余 $N_s-1$ 个是"已发出 `cp.async`、尚未被消费"的预取。被消费的那一份数据在寄存器/mma 操作数里，不需要额外占一份 **预取缓冲**。所以
 
-$$\text{在飞迭代数} = N_s，\qquad \text{预取缓冲份数} = N_s - 1$$
+$$\text{在飞迭代数} = N_s,\qquad \text{预取缓冲份数} = N_s - 1$$
 
 代入 $N_s=2$：在飞 2 个迭代，预取缓冲 1 份——**这恰好就是"没有双缓冲"**： 你只有一块 shared memory，`cp.async` 写它、`tl.dot` 读它，两者必须串行。真正的"两块缓冲交替"要 $\beta=2$，即 $N_s=3$。
 
-$\max(1，\cdot)$ 那个下限也解释得通：$N_s=1$ 表示不做流水，但仍然要有一块地方放 tile，所以至少 1 份。
+$\max(1,\cdot)$ 那个下限也解释得通：$N_s=1$ 表示不做流水，但仍然要有一块地方放 tile，所以至少 1 份。
 
 PTX 层的对应语义（NVIDIA PTX ISA §9.7.9.26）支持这个图景： `cp.async.commit_group` "commits all prior uncommitted cp.async instructions into a cp.async-group"；`cp.async.wait_group N` "wait till only N or fewer of the most recent cp.async-groups are pending and all the prior cp.async-groups committed by the executing threads are complete"。**等待的粒度是"组"**，每轮把这一轮的预取 commit 成一组，然后 `wait_group(β-1)` 允许 $\beta-1$ 个组继续在飞——组数与缓冲份数一一对应。**但本仓没有 dump TTGIR/PTX 去数组数**（EXP-T08 §7 明列为开放项）， 所以"组数 = 份数"这条标为**未核实**；确定的只有 `metadata.shared` 这一层。
 
@@ -310,14 +310,14 @@ Triton 论文（Tillet, Kung, Cox, MAPL '19, DOI:10.1145/3315508.3329973）把�
 
 fp8 e4m3 只有 3 位尾数、满量程 ±448,per-tensor 一个 scale 会被离群值拖垮。 DeepSeek-V3 技术报告（arXiv:2412.19437 §3.3）把做法写成两句： "for activations, we group and scale elements on a 1x128 tile basis (i.e., per token per 128 channels); and (2) for weights, we group and scale elements on a 128x128 block basis"；格式选择是 "adopt the E4M3 format on all tensors for higher precision"。本仓原样搬到 sm_89:
 
-- 权重 $B\ (K,N)$：每个 $128\times128$ 块一个 scale,$s^B_{k_g,n_g} = \max|B_{\text{blk}}|/448$;
-- 激活 $A\ (M，K)$：每行每 128 长的 K 组一个 scale，$s^A_{m，k_g} = \max|A_{m，k_g}|/448$。
+- 权重 $B\ (K,N)$：每个 $128\times128$ 块一个 scale，$s^B_{k_g,n_g} = \max|B_{\text{blk}}|/448$；
+- 激活 $A\ (M,K)$：每行每 128 长的 K 组一个 scale，$s^A_{m,k_g} = \max|A_{m,k_g}|/448$。
 
 #### 3.6.2 反量化怎么融进累加(题眼)
 
 $$C_{mn} = \sum_{k_g} s^A_{m,k_g}\, s^B_{k_g,n_g} \left(\sum_{k\in k_g} \hat A_{mk}\hat B_{kn}\right)$$
 
-**为什么两个 scale 可以提到内层求和之外**，把这一步写严格（本讲义推导）：内层求和的下标 $k$ 跑遍第 $k_g$ 组；在这个组内 $s^A_{m，k_g}$ 与 $s^B_{k_g，n_g}$ 都是常数（与 $k$ 无关），而有限和满足 $\sum_k (c\cdot x_k) = c\sum_k x_k$。**成立条件就是 "组内 scale 与求和下标无关"**——这要求主循环的 K 步长恰好等于缩放组长度。
+**为什么两个 scale 可以提到内层求和之外**，把这一步写严格（本讲义推导）：内层求和的下标 $k$ 跑遍第 $k_g$ 组；在这个组内 $s^A_{m,k_g}$ 与 $s^B_{k_g,n_g}$ 都是常数（与 $k$ 无关），而有限和满足 $\sum_k (c\cdot x_k) = c\sum_k x_k$。**成立条件就是 "组内 scale 与求和下标无关"**——这要求主循环的 K 步长恰好等于缩放组长度。
 
 两条对齐条件因此都不是调优选择，是**正确性前提**：
 
@@ -351,9 +351,9 @@ $$C_{mn} = \sum_{k_g} s^A_{m,k_g}\, s^B_{k_g,n_g} \left(\sum_{k\in k_g} \hat A_{
 
 **要纠正的说法**：本仓过去写过"Hopper wgmma 原生 scale 槽替你省掉那部分"（docs/theory/06 §2 的表、src/fp8_gemm.py：24-26 的 docstring）。按 PTX 与 CUTLASS 的语义，**wgmma 的三个 scale 操作数不是任意缩放因子**： `scale_D` 取 0 或 1，控制累加器是否被清零（"scale_D is either 0 or 1， and controls whether or not the accumulator is zero-initialized"）； `scaleA`/`scaleB` 取 1 或 −1，只用于取负（"scaleA and scaleB are either 1 or −1 for negating the operand"）。**它们是符号位，不是缩放槽。**
 
-真正拥有"每 16/32 个元素一个 scale factor"的硬件块缩放，是 **Blackwell 的 `tcgen05.mma`** 才引入的(CUTLASS 文档：带 `mxf8f6f4`/`mxf4`/`nvf4` kind 的指令执行 $D = C + (A\times SFA)\times(B\times SFB)$，scale factor 按 K 维每 16 或 32 个元素一个)。
+真正拥有"每 16/32 个元素一个 scale factor"的硬件块缩放，是 **Blackwell 的 `tcgen05.mma`** 才引入的（CUTLASS 文档：带 `mxf8f6f4`/`mxf4`/`nvf4` kind 的指令执行 $D = C + (A\times SFA)\times(B\times SFB)$，scale factor 按 K 维每 16 或 32 个元素一个）。
 
-那么 DeepGEMM 在 Hopper 上是怎么做的？DeepSeek-V3 报告 §3.3 写得很清楚：因为 H800 的 FP8 tensor core 累加精度只有约 14 位，他们 "adopt the strategy of promotion to CUDA Cores for higher precision"，在每 $N_C = 128$ 个元素的 MMA 之后把部分和搬到 FP32 寄存器上用 CUDA core 累加。 **这与本仓在 Ada 上做的事是同一件事**(src/fp8_gemm.py：111-113 的注释就叫 "二级累加（DeepGEMM 的 accumulator promotion 在 mma 世代的形态）")。
+那么 DeepGEMM 在 Hopper 上是怎么做的？DeepSeek-V3 报告 §3.3 写得很清楚：因为 H800 的 FP8 tensor core 累加精度只有约 14 位，他们 "adopt the strategy of promotion to CUDA Cores for higher precision"，在每 $N_C = 128$ 个元素的 MMA 之后把部分和搬到 FP32 寄存器上用 CUDA core 累加。 **这与本仓在 Ada 上做的事是同一件事**（src/fp8_gemm.py：111-113 的注释就叫 "二级累加（DeepGEMM 的 accumulator promotion 在 mma 世代的形态）"）。
 
 **所以修正后的结论是**：Hopper 相对 Ada 的优势在**搬运（TMA）与矩阵指令的异步性（wgmma）**，不在"原生 scale 槽"；细粒度缩放两代都得在 CUDA core 侧做。 "DeepGEMM 为什么不能直接跑 4090"的准确答案是**前两行，不是第三行**—— DeepGEMM 的 README 把要求写成 "NVIDIA SM90 or SM100 architecture GPU"， sm_89 不在其中。
 
@@ -483,7 +483,7 @@ grouped 调度优化的是 **L2 那一层**：它不改变每个 CTA 读多少�
 
 **这段注释本身有两处需要按 EXP-T08 修正，必须显式说出来**：
 
-- 注释写"分配 N 份 smem 缓冲"，实测是 $\max(1，N-1)$ 份（§3.3.2）。
+- 注释写"分配 N 份 smem 缓冲"，实测是 $\max(1,N-1)$ 份（§3.3.2）。
 - 注释写"stages 过深反过来压 CTA 并发"，在这个 tile 配置下不成立——寄存器已把 CTA/SM 钉死在 1(§3.4.3)。
 
 **代码不改、数字不改，改的是对它的解释**；这正是 EXP-T08 §6 对自己的定位（"EXP-T02 的数字不变，变的是对它的解释"）。**能把"我以前的解释错了"写进讲义， 比讲义里没有错误更有价值。**
@@ -547,7 +547,7 @@ def quant_fp8_block(w: torch.Tensor):
 
 角色：§3.6 缩放布局的构造端。`reshape(K//G, G, N//G, G)` 把 $128\times128$ 块折成两个维度，`amax(dim=(1,3))` 一次求出每块的绝对最大值——**用 view 而不是循环**是这段唯一的性能要点。`scale = amax / 448` 让块内最大值恰好顶到 e4m3 满量程，把有限的 3 位尾数全用在有效动态范围上；`clamp(min=1e-8)` 防全零块除 0。整除断言不只是防御：它同时是**缩放组代数的前提**(§3.6.2)与"GEMM 主循环可以零 K 维 mask"的依据。改错会怎样：把 absmax 换成 per-tensor 一个 scale，kernel 一行不用改、速度一样，只是量化误差从 3.6e-2 量级劣化到被离群值主导——**精度回归不会让任何性能测试变红**。
 
-一个值得算一遍的小账（本讲义推导）：scale 张量本身多大？权重 $(K，N)$ 的 scale 是 $(K/128， N/128)$ fp32，即每 $128\times128\times1\，\mathrm{B} = 16384$ B 的 fp8 权重配 4 B scale，**额外开销 0.024%**；而激活的 per-token-group scale 是 $(M， K/128)$ fp32，每 $128\times1$ B 配 4 B，**开销 3.1%**。两边差 128 倍，原因是激活的分组只在 K 维、不在 token 维。**"细粒度"的存储代价几乎全在激活侧**——这也是为什么生产实现会把激活量化融进上游算子的 epilogue，顺手把 scale 写出去，而不是单独跑一趟。
+一个值得算一遍的小账（本讲义推导）：scale 张量本身多大？权重 $(K,N)$ 的 scale 是 $(K/128, N/128)$ fp32，即每 $128\times128\times1\,\mathrm{B} = 16384$ B 的 fp8 权重配 4 B scale，**额外开销 0.024%**；而激活的 per-token-group scale 是 $(M, K/128)$ fp32，每 $128\times1$ B 配 4 B，**开销 3.1%**。两边差 128 倍，原因是激活的分组只在 K 维、不在 token 维。**"细粒度"的存储代价几乎全在激活侧**——这也是为什么生产实现会把激活量化融进上游算子的 epilogue，顺手把 scale 写出去，而不是单独跑一趟。
 
 **第 6 段 · BLOCK_K 与缩放组硬对齐**(src/fp8_gemm.py：73-77)
 
@@ -561,7 +561,7 @@ def quant_fp8_block(w: torch.Tensor):
 
 角色：一行 `constexpr` 承载 §3.6.2 的全部前提。把 `BLOCK_K` 写死在 kernel 内（而不是开放成参数）是刻意的：它必须等于缩放组长度，开放出去就等于把一个**正确性前提**降级成调优旋钮。改错会怎样：BLOCK_K 取 64，一轮主循环只覆盖半个 scale 组，反量化就不能提到 dot 之外——要么逐元素乘 scale（tensor core 路径废掉），要么算错。
 
-**顺带说清一个连带后果**：BLOCK_K 被钉死在 128 之后，fp8 kernel 的单份 tile 是 $(128+128)\times128\times1\，\mathrm{B} = 32\，\mathrm{KB}$（fp8 是 1 B/元素），与 fp16 路线的 32 KB **恰好相同**。所以 §3.4.1 那张 shared memory 表可以原样套到 fp8 kernel： `num_stages=3`（默认，src/fp8_gemm.py：123）= 2 份 = 64 KB。**fp8 省下来的字节被翻倍的 BLOCK_K 吃回去了**——这是"降精度不一定省片上资源"的一个具体例子（本讲义推导；本仓未对 fp8 kernel 跑资源探针，数值为按公式推算）。
+**顺带说清一个连带后果**：BLOCK_K 被钉死在 128 之后，fp8 kernel 的单份 tile 是 $(128+128)\times128\times1\,\mathrm{B} = 32\,\mathrm{KB}$（fp8 是 1 B/元素），与 fp16 路线的 32 KB **恰好相同**。所以 §3.4.1 那张 shared memory 表可以原样套到 fp8 kernel： `num_stages=3`（默认，src/fp8_gemm.py：123）= 2 份 = 64 KB。**fp8 省下来的字节被翻倍的 BLOCK_K 吃回去了**——这是"降精度不一定省片上资源"的一个具体例子（本讲义推导；本仓未对 fp8 kernel 跑资源探针，数值为按公式推算）。
 
 **第 7 段 · fp8 主循环：二级累加**(src/fp8_gemm.py：96-115)
 
@@ -662,7 +662,7 @@ figures/fig2_gemm_stages.png（脚本 scripts/plot_readme_figures.py:94-118）�
 - **对照物命名诚实**：cuBLAS 这一行指的是 `torch.matmul`（fp16 走 cuBLASLt）， 脚本里写作 `bench(lambda: a @ b)`(scripts/test_ew_gemm.py：89)，记录与措辞约定都注明 **cuBLAS = torch.matmul dispatch**。它不是直接调 cuBLAS API 的结果，含 torch 的分发开销——对 0.86 ms 量级的大 GEMM，分发那几微秒可忽略，但口径要写出来。
 - **"打平"的准确说法**：square4k 3 轮 **159.4±1.2 vs 160.0±0.7 TFLOPS**，差值落在误差条内，所以说"打平（差 0.4% 内，单轮 160.5 vs 159.8）"；**不能**说"超过 cuBLAS"。
 - **"反超 4.8%"的准确说法**：那是 Qwen3-8B up_proj 形状（2048×4096×12288）的**单轮存盘值** 154.4(stages=4)vs 147.3。3 轮口径下是 155.3±0.9 vs 150.4±4.5，幅度收窄到 +3.3%，且 cuBLAS 侧的轮间 std 达 2.98%（四个数字里波动最大的一个）。**诚实的读法是： 这一格从"打平"到"小幅反超"都在数据支持范围内，引用 4.8% 时必须带"单轮存盘 raw"**（措辞约定：只引存盘 raw 轮）。
-- **机理账**：$2MNK/t$。square4k 的 $2\cdot4096^3 = 137.4\ \mathrm{GFLOP}$， $/0.8566\，\mathrm{ms} = 160.4\ \mathrm{TFLOPS}$（与存盘的 160.5 对上）；对 165.2 TFLOPS 峰值是 97%，与 kperf 卡片"算力 98%、occupancy 17%(regs 170)"吻合（终端级证据，EXP-T06 §7）。**到顶了**——这也是为什么本仓不再往下扫 BM/BN/BK 全空间：剩余空间不足 3%，而 tile 全扫的代价远大于收益（EXP-T02 §7 如实列为未做项）。
+- **机理账**：$2MNK/t$。square4k 的 $2\cdot4096^3 = 137.4\ \mathrm{GFLOP}$， $/0.8566\,\mathrm{ms} = 160.4\ \mathrm{TFLOPS}$（与存盘的 160.5 对上）；对 165.2 TFLOPS 峰值是 97%，与 kperf 卡片"算力 98%、occupancy 17%(regs 170)"吻合（终端级证据，EXP-T06 §7）。**到顶了**——这也是为什么本仓不再往下扫 BM/BN/BK 全空间：剩余空间不足 3%，而 tile 全扫的代价远大于收益（EXP-T02 §7 如实列为未做项）。
 - **正确性同批出**：两形状相对误差 ~7e-4（fp16 输入 fp32 累加 vs torch.matmul， data/derived/exp-t02_stability_3rounds.csv 的 correctness 行）。性能表和正确性表出自**同一次运行**，不存在"快的那版和对的那版不是同一个"。
 
 **这张图现在要配一句新的读法**（EXP-T08 之后）：四条 Triton 条的正确标签不是 "1/2/3/4 级流水"，而是"**1/1/2/3 份缓冲**"。按份数重画，那张图会变成一条干净的 "份数 1 → 2 有大跳，2 → 3 几乎持平"的曲线，而不是"2 级很弱、3 级突然很强"这种需要额外解释的形状。**同一批数据，换一个正确的横轴标签，反常就消失了。**
@@ -703,14 +703,14 @@ figures/fig2_gemm_stages.png（脚本 scripts/plot_readme_figures.py:94-118）�
 ## 6. 误区与边界
 
 1. **"双缓冲是 GEMM 的标配收益，而你测出只有 1%"**——两句都要修正。EXP-T08 证明 `num_stages=2` 在本机只有 1 份缓冲，**那一档根本不是双缓冲**；真正的双缓冲是 `num_stages=3`，它值 +19%(18.9σ)。所以正确说法是：**双缓冲确实值钱，而 `num_stages` 这个参数名会骗人。**(§3.3)
-2. **"num_stages 就是 shared memory 份数"**——不是。文档说的是"在飞的迭代数" (`tl.range` docstring)，实测份数是 $\max(1， N_s-1)$。差 1 来自"正在被消费的那一迭代不额外占预取缓冲"(§3.3.3)。
+2. **"num_stages 就是 shared memory 份数"**——不是。文档说的是"在飞的迭代数" (`tl.range` docstring)，实测份数是 $\max(1, N_s-1)$。差 1 来自"正在被消费的那一迭代不额外占预取缓冲"(§3.3.3)。
 3. **"stages 越深越压占用率"**——在本仓这个 tile 上不成立。寄存器（170/线程 × 256） 已经把 CTA/SM 钉死在 1，shared memory 从 32 KB 加到 96 KB 也压不出更少的 CTA (§3.4.3)。**先算清哪条预算更紧，再谈代价。**
 4. **"occupancy 低说明 kernel 没写好"**——本仓 GEMM occupancy 17% 却打出 97% 峰值算力。tensor core kernel 靠寄存器堆 ILP 藏延迟，占用率只在**带宽 % 与算力 % 两个都低**时才是嫌疑人（§3.4.4，docs/theory/04 §2）。
 5. **"打平 cuBLAS 可以简写成打平"**——不行。完整口径是**限两测形状 fp16、cuBLAS = torch.matmul dispatch(cuBLASLt)、未做全形状扫描**；而且"反超 4.8%"是单轮存盘值， 3 轮口径收窄到 +3.3% 且对照侧 std 近 3%(§5.1)。再补一条新发现的舒适条件： **两个测试形状的 CTA 数恰好都是 128 的整数倍**（8 波 / 12 波，§3.1.2）， 没有尾波损失。
 6. **"FP8 给推理提速 1.5×"**——最容易被误引的一句。1.5× 是**预量化孤立 GEMM** 的口径； 同一份代码把在线量化计进去只有 72.9 TFLOPS(§5.3)。把 1.5× 说成端到端提速，是本仓措辞约定明令禁止的措辞。
 7. **"Hopper 的 wgmma 有原生 scale 槽"**——**不成立**。wgmma 的 `scale_D` ∈ {0,1} 控制是否累加，`scaleA`/`scaleB` ∈ {1，−1} 只用于取负；硬件块缩放是 Blackwell 的 `tcgen05.mma` 才有（§3.6.4）。DeepGEMM 在 Hopper 上同样把细粒度缩放放在 CUDA core 侧（DeepSeek-V3 报告 §3.3 的 promotion to CUDA Cores）。 **本仓过去的表述有误，数字不受影响。**
 8. **"这套账换个形状照样成立"**——不一定。§3.1.1 的实测比 HBM 上界快 2.5 倍，前提是 4096² 的两个操作数合计 67 MB、进得了 72 MB 的 L2；权重远大于 L2 的形状要重算访存账（推断，本仓未测）。
-9. **"份数公式 $\max(1，N-1)$ 是 Triton 的通用规律"**——**只在本机这一版上验证过**。 EXP-T08 的环境是 triton 3.6 / torch 2.11 / RTX 4090；换版本、换后端、换到 `tl.range` 的 `num_stages` 属性（语义与 kernel 参数不同，见 §3.3.1）都可能不一样。 **它是一条实测事实，不是一条语言规范。**
+9. **"份数公式 $\max(1,N-1)$ 是 Triton 的通用规律"**——**只在本机这一版上验证过**。 EXP-T08 的环境是 triton 3.6 / torch 2.11 / RTX 4090；换版本、换后端、换到 `tl.range` 的 `num_stages` 属性（语义与 kernel 参数不同，见 §3.3.1）都可能不一样。 **它是一条实测事实，不是一条语言规范。**
 
 **适用边界**：全部数字来自单卡 RTX 4090、fp16 输入 fp32 累加、两个测过的形状（4096³ 与 2048×4096×12288）；tile 空间未全扫、GROUP_M 未扫；stall 归因无性能计数器支持，机制结论标注为从数据反推或从编译产物反推；$N_s=5$ 是否超限为推断、未测； fp8 kernel 的寄存器数未探；cp.async 的组数与缓冲份数的对应关系未在本仓直接观测（EXP-T08 §7）；FP8 部分限 e4m3、BLOCK_N 硬绑 128、激活量化未融合进上游算子（EXP-T06 §7 的开放项）。
 
@@ -737,7 +737,7 @@ figures/fig2_gemm_stages.png（脚本 scripts/plot_readme_figures.py:94-118）�
 
 | # | 来源与声称 | 本仓实测（EXP 锚） | 差异分析 |
 |---|---|---|---|
-| 1 | Triton 文档 `tl.range`："pipeline the loop into this many stages (so there are `num_stages` iterations of the loop in flight at once)" | EXP-T08：缓冲份数 = $\max(1， N_s-1)$；$N_s$=2 时 `metadata.shared` 与 $N_s$=1 完全相同 | **不是文档错，是两个量**：在飞迭代数 vs 预取缓冲份数，差 1 是流水结构的正常结果（§3.3.3）。**本仓过去把两者当成一个，这是被本记录纠正的自家错误** |
+| 1 | Triton 文档 `tl.range`："pipeline the loop into this many stages (so there are `num_stages` iterations of the loop in flight at once)" | EXP-T08：缓冲份数 = $\max(1, N_s-1)$；$N_s$=2 时 `metadata.shared` 与 $N_s$=1 完全相同 | **不是文档错，是两个量**：在飞迭代数 vs 预取缓冲份数，差 1 是流水结构的正常结果（§3.3.3）。**本仓过去把两者当成一个，这是被本记录纠正的自家错误** |
 | 2 | Triton 文档 `triton.Config`：num_stages "Mostly useful for matrix multiplication workloads on SM80+ GPUs" | 本仓两个 kernel（GEMM 与 FA2）上都生效，且映射一致 | 一致。补充信息：同一文档指出 kernel 参数版本"only pipelines loads that feed into `dot` operations"，本仓两个 kernel 的 load 都喂给 dot，所以适用 |
 | 3 | Triton 论文（MAPL '19）§5.1.1：Pre-Fetching 是机器无关 pass；§5.2.3：shared memory 按 live range 做线性时间分配 | 本仓只能观测分配结果（`metadata.shared`），看不到 live range 分析过程 | 论文描述的是初代 Triton-C/Triton-IR 架构，本机 3.6.0 已换成 MLIR 架构，**pass 名与实现都已改写**；论文能提供的是设计意图而非当前实现细节。引用时须注明代际 |
 | 4 | Triton 论文 §6.1："Triton and cuBLAS are generally on par with each other， and achieve more than 90% of the device's peak performance on certain tasks" | 本仓 square4k：159.4±1.2 vs cuBLAS 160.0±0.7（打平），对 165.2 峰值 97% | **结论方向一致**，但论文的实验机器是 GTX 1070、对照是 cuBLAS 10.0，与 4090 + 现代 cuBLASLt 完全不可比。论文同时指出 cuBLAS 在浅层 transformer 形状上因 3D(split-K)算法仍占优——**本仓没有 split-K，这是形状覆盖面差距的一个具体名字** |
@@ -758,7 +758,7 @@ figures/fig2_gemm_stages.png（脚本 scripts/plot_readme_figures.py:94-118）�
 
 - **cuBLAS / CUTLASS**：同样的 tile + 流水思想，但它们按形状族预置了几十套 kernel 与启发式选择器，并做了 split-K、stream-K 等本仓没有的负载均衡策略。Triton 论文 §6.1 就点名过这条（"CuBLAS， however， remains faster than Triton on shallow transformer neural networks thanks to the use of a 3D algorithm which splits deep reductions into independent chunks"）。本仓是"一套 tile 打两个形状"，差距在**覆盖面**而不是单点峰值（§7 第 12 问）。
 - **Hopper 的 wgmma + TMA**：把"预取"从 cp.async 的显式流水升级成硬件描述符驱动的批搬运，异步矩阵指令自带流水语义与 warpgroup 级同步（`wgmma.commit_group` / `wgmma.wait_group`）。这是 DeepGEMM 能做到本仓做不到那部分的硬件根源——**但不包括"原生 scale 槽"，见 §3.6.4**。
-- **Blackwell 的 tcgen05.mma**：块缩放进硬件($D=C+(A\cdot SFA)(B\cdot SFB)$)， §3.6.3 那条 4.7% 的缩放链与 §3.6.3 那个"两个 fp32 tile 同时活着"的寄存器压力假设在这一代**都会消失**。本仓无该硬件，不做任何性能主张。
+- **Blackwell 的 tcgen05.mma**：块缩放进硬件（$D=C+(A\cdot SFA)(B\cdot SFB)$）， §3.6.3 那条 4.7% 的缩放链与 §3.6.3 那个"两个 fp32 tile 同时活着"的寄存器压力假设在这一代**都会消失**。本仓无该硬件，不做任何性能主张。
 - **推理引擎里的 GEMM**：真实 serving 的瓶颈形状是 decode 的 $M=1$（第 4 段的 linear 自适应），以及"量化 + GEMM + epilogue"的融合边界——本仓把量化留在 torch 侧，这正是 §5.3 那个 72.9 的来源；生产实现会把激活量化融进上一个算子的 epilogue，顺手把 per-token scale 写出去（§4 第 5 段的存储账说明了为什么值得这么做）。
 - **接口层的隐藏拷贝**：本仓 `linear` 每次都做 `weight.t().contiguous()`（第 4 段）， 生产实现会在加载时就把权重存成需要的布局。**这类成本不在任何 kernel 数字里**， 只在端到端里显形。
 
@@ -778,7 +778,7 @@ figures/fig2_gemm_stages.png（脚本 scripts/plot_readme_figures.py:94-118）�
 **论文**
 
 1. Tillet， Kung， Cox， "Triton： An Intermediate Language and Compiler for Tiled Neural Network Computations"， MAPL '19， DOI：10.1145/3315508.3329973， §5.1.1 Pre-Fetching、§5.2.3 Shared Memory Allocation、§5.2.4 Shared Memory Synchronization、§6.1。——想知道"编译器凭什么能替你排流水""shared memory 份数是怎么被算出来的""cuBLAS 在哪类形状上仍然赢"，读这四处；同时注意它描述的是初代 Triton-C/Triton-IR 架构，与本机 3.6.0 的 MLIR 架构已隔一代。
-2. DeepSeek-AI， "DeepSeek-V3 Technical Report"， arXiv：2412.19437，§3.3 FP8 Training (Fine-Grained Quantization、Increasing Accumulation Precision)。——想核实 "1×128 激活 / 128×128 权重"这套缩放布局的原始表述，以及"H800 的 FP8 累加只有约 14 位、所以要 promotion to CUDA Cores"这条关键事实，读这一节。
+2. DeepSeek-AI， "DeepSeek-V3 Technical Report"， arXiv:2412.19437，§3.3 FP8 Training (Fine-Grained Quantization、Increasing Accumulation Precision)。——想核实 "1×128 激活 / 128×128 权重"这套缩放布局的原始表述，以及"H800 的 FP8 累加只有约 14 位、所以要 promotion to CUDA Cores"这条关键事实，读这一节。
 3. Williams, Waterman & Patterson, "Roofline: an insightful visual performance model for multicore architectures", CACM 52(4):65-76, DOI:10.1145/1498765.1498785。——想把 §2.1 的三层算术强度放进一个统一框架，读它。
 
 **官方文档**
@@ -787,7 +787,7 @@ figures/fig2_gemm_stages.png（脚本 scripts/plot_readme_figures.py:94-118）�
 5. NVIDIA, "Ada Tuning Guide"(docs.nvidia.com/cuda/ada-tuning-guide), §1.4.1.1 Occupancy、§1.4.2.2 Unified Shared Memory/L1/Texture Cache。—— 99 KB / 100 KB / 48 warps / 255 regs / 24 blocks 这五个上限的官方原文，以及 L1-shared 可配置的 carveout 档位（0/8/16/32/64/100 KB）与 48 KB 以上需 opt-in。
 6. NVIDIA PTX ISA，§9.7.9.26 Asynchronous copy。——`cp.async` 的 ca/cg 修饰符与 cp-size 只能取 4/8/16 字节（cg 必须 16）、`commit_group` 的"成组提交"、 `wait_group N` 的"只剩 N 组在飞时返回"。§3.3.3 与 §3.7.1 的依据。
 7. NVIDIA PTX ISA，§9.7.15（mma，warp 级集合；m16n8k16 的 fragment 布局）与 §9.7.16（wgmma，warpgroup 级异步）。——想弄清"为什么不能在 dot 周围写发散分支" 与"wgmma 的三个 scale 操作数到底是什么"，读这两章。
-8. NVIDIA CUTLASS 文档：Warpgroup MMA Programming Guide（scale_D ∈ {0,1}、 scaleA/scaleB ∈ {1，−1}、matrix descriptor、commit/wait 模型）与 Blackwell functionality(`tcgen05.mma` 的 mxf8f6f4/mxf4/nvf4 kind 与 $D=C+(A\cdot SFA)(B\cdot SFB)$)。——§3.6.4 那条纠正的直接依据；想一次看清三代块缩放的分界，读这两处。
+8. NVIDIA CUTLASS 文档：Warpgroup MMA Programming Guide（scale_D ∈ {0,1}、 scaleA/scaleB ∈ {1，−1}、matrix descriptor、commit/wait 模型）与 Blackwell functionality（`tcgen05.mma` 的 mxf8f6f4/mxf4/nvf4 kind 与 $D=C+(A\cdot SFA)(B\cdot SFB)$）。——§3.6.4 那条纠正的直接依据；想一次看清三代块缩放的分界，读这两处。
 9. NVIDIA， "Matrix Multiplication Background User's Guide"："Arithmetic Intensity"、 §3.1 Tile Quantization、§3.2 Wave Quantization。——$MNK/(MK+NK+MN)$ 这个公式的出处，以及"CTA 数不是 SM 数整数倍会出尾波"的定义（§3.1.2 的依据）。
 10. NVIDIA, "GPU Performance Background User's Guide" §4 Understanding Performance。——ops:byte 的官方定义（"the ratio of a processor's math and memory bandwidths"） 与三个限制因子的原话。
 11. Triton 官方 API 文档与本机 3.6.0 源码：`triton.Config`(runtime/autotuner.py)、 `tl.range`(language/core.py)、`tl.dot_scaled`（同上）、 `min_dot_size`(backends/nvidia/compiler.py)、`OutOfResources` 的报错文本（runtime/errors.py）。——想核实"num_stages 到底承诺了什么""dot 的真实形状下界是多少""那句 `Reducing block sizes or num_stages may help` 从哪来"，读这五处。
@@ -801,5 +801,5 @@ figures/fig2_gemm_stages.png（脚本 scripts/plot_readme_figures.py:94-118）�
 16. records/EXP-T08_smem_stage_probe.md §1-§7—— 假设与证伪条件的锁定、六格逐格吻合的表、以及三条开放问题（未 dump PTX / 未扫 num_warps / 寄存器非单调未解释）。
 17. records/EXP-T02_gemm_pipeline.md §5-§7—— 存盘轮口径、首轮数字作废的处理， 以及"最优 stage 随形状摇摆"的结论边界。
 18. records/EXP-T06_fp8_gemm.md §5-§7—— 四口径表、kperf 三卡观测的终端级证据登记， 以及 BLOCK_N 硬绑 128 这个开放项。
-19. docs/theory/02_double_buffering.md §2—— CUDA 手写双缓冲伪码与 Triton 版的对照 (**其中"分配 N 份 smem 缓冲"一句按 EXP-T08 修正为 $\max(1，N-1)$ 份**)。
+19. docs/theory/02_double_buffering.md §2—— CUDA 手写双缓冲伪码与 Triton 版的对照（**其中"分配 N 份 smem 缓冲"一句按 EXP-T08 修正为 $\max(1,N-1)$ 份**）。
 20. docs/theory/06_fp8_gemm_ada.md §2—— Ada/Hopper 界线表（**其中"wgmma 原生 scale 槽"一格按 §3.6.4 修正**）。

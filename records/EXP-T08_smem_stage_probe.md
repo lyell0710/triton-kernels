@@ -1,6 +1,6 @@
 # EXP-T08 · num_stages 与 shared memory 份数的映射:编译期资源探针
 
-> **一句话结论**：假设被证伪：`num_stages=2` 并没有开出第二份 shared memory，实测映射是**份数 = max(1, num_stages − 1)**。因此 EXP-T02《流水线 GEMM》「2 级只 +1%」的正确读法不是「双缓冲只值 1%」，而是「这一档还不是双缓冲」。
+> **一句话结论**：假设被证伪：`num_stages=2` 并没有开出第二份 shared memory，实测映射是**份数 = max(1， num_stages − 1)**。因此 EXP-T02《流水线 GEMM》「2 级只 +1%」的正确读法不是「双缓冲只值 1%」，而是「这一档还不是双缓冲」。
 
 ## 0. 元信息
 | 日期 | 2026-08-25 | 环境 | py312(triton3.6/torch2.11), RTX 4090, driver 610.57.04 | 状态 | 完成 |
