@@ -14,6 +14,8 @@
 | [EXP-T06](records/EXP-T06_fp8_gemm.md) | fp8_gemm | FP8 GEMM（per-block scaling,sm_89 mma 路线） | 2026-08-24 | 完成 | per-block FP8 **227.7/235.7 TFLOPS = 1.5× fp16 cuBLAS**(data/raw/EXP-T06/) |
 | [EXP-T07](records/EXP-T07_moe_permute.md) | moe_permute | MoE Permute/Unpermute（dispatch-combine 单卡版） | 2026-08-24 | 完成 | unpermute **12.5×** vs torch,gather 式无原子（data/raw/EXP-T07/） |
 | [EXP-T08](records/EXP-T08_smem_stage_probe.md) | smem_stage_probe | num_stages 与 shared memory 份数的映射：编译期资源探针 | 2026-08-25 | 完成 | 缓冲份数 = **num_stages−1**（编译期 metadata.shared 实测，data/raw/EXP-T08/） |
+| [EXP-T09](records/EXP-T09_llm_fused_elementwise.md) | llm_fused_elementwise | Triton 版 LLM 融合逐元素算子（fused_add_rmsnorm / rope / silu_and_mul） | 2026-08-25 | 完成 | 见记录 §5 |
+| [EXP-T10](records/EXP-T10_fa2_backward.md) | fa2_backward | Triton FA2 backward（简化版）：重算而非存储 | 2026-09-16 | 完成 | S=4096 达 SDPA-flash backward **91.2%**（3 轮）；三梯度 6/6 过 gate |
 
 > **stability（2026-08-24 晚）**：headline 数字已全部 ≥3 轮复测，mean/std 见 `data/derived/exp-t01_stability_3rounds.csv` 等五份（T01/02/05/06/07）；T05 launch 塌缩勘误 11.8×→**11.6×**。阶段二增量（8/24）：FP8 per-block GEMM(theory/06)、MoE permute/unpermute（theory/07，对照 DeepEP）、flash-decoding(theory/05)、CUDA Graph（theory/03 第四层）、kperf 无计数器观测（theory/04）；TP=2 引擎侧见 llm-engine#EXP-D22《TP=2 张量并行》。
 

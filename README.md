@@ -104,6 +104,7 @@ for k0 in range(0, K, BLOCK_K):
 ```bash
 # 环境:CUDA GPU + torch >=2.x + triton >=3.x(实测环境见各 record 第 2 节)
 python scripts/test_fa2.py           # FA2:6 形状正确性 gate + S=512..4K bench
+python scripts/test_fa2_bwd.py       # FA2 backward:6 形状×3 梯度 gate + S=512..4K bench
 python scripts/test_ew_gemm.py       # GEMM stages 扫描 + RMSNorm/softmax/int8
 python scripts/test_fp8_gemm.py      # FP8 per-block GEMM 四口径
 python scripts/test_moe_permute.py   # MoE permute/unpermute + 往返一致性
@@ -128,6 +129,7 @@ bench 结果只追加新文件、从不覆盖已有原始数据；每组 `data/r
 | [EXP-T07 MoE Permute/Unpermute(dispatch-combine 单卡版)](records/EXP-T07_moe_permute.md) | MoE unpermute gather 式无原子 12.5× vs torch；索引构建成本反而大于搬运本体 |
 | [EXP-T08 num_stages 与 shared memory 份数的映射:编译期资源探针](records/EXP-T08_smem_stage_probe.md) | 编译期资源探针证伪「num_stages = 缓冲份数」：实测份数 = N−1，故 stages=2 尚未双缓冲、stages=3 才是 |
 | [EXP-T09 Triton 版 LLM 融合逐元素算子(fused_add_rmsnorm / rope / silu_and_mul)](records/EXP-T09_llm_fused_elementwise.md) | LLM 融合逐元素算子三件套（fused_add_rmsnorm / rope / silu_and_mul）作为手写 CUDA 的同 harness 对照臂：HBM 区间 922.1 / 898.5 / 928.0 GB/s（91.5% / 89.1% / 92.1% 峰值），与手写两两差 <2%，补上「Triton vs CUDA」判断曲线第三点；数字权威在 Kernel_Optimazation#EXP-K05《LLM 融合逐元素算子三件套》 |
+| [EXP-T10 Triton FA2 backward（简化版）：重算而非存储](records/EXP-T10_fa2_backward.md) | 三梯度 dq/dk/dv 6/6 对 autograd 通过（≤4.8e-3）；S=4096 达 SDPA-flash backward **91.2%**、S=2048 达 87.8%（3 轮 mean±std） |
 
 ## 测量方法
 

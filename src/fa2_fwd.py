@@ -33,12 +33,13 @@ import triton.language as tl
 
 @triton.jit
 def _fa2_fwd_kernel(
-    Q, K, V, O,
+    Q, K, V, O, LSE,
     sm_scale,
     stride_qb, stride_qh, stride_qm, stride_qd,
     stride_kb, stride_kh, stride_kn, stride_kd,
     stride_vb, stride_vh, stride_vn, stride_vd,
     stride_ob, stride_oh, stride_om, stride_od,
+    stride_lb, stride_lh, stride_lm,
     n_ctx,
     NUM_Q_HEADS: tl.constexpr,
     GQA_GROUP: tl.constexpr,          # q_heads // kv_heads
@@ -47,6 +48,7 @@ def _fa2_fwd_kernel(
     BLOCK_N: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
     IEEE_DOT: tl.constexpr,
+    WRITE_LSE: tl.constexpr,
 ):
     pid_m = tl.program_id(0)          # 第几个 Q 行块
     pid_bh = tl.program_id(1)         # batch*q_head 扁平索引(两维并行压一维,免 3D grid)
@@ -128,18 +130,34 @@ def _fa2_fwd_kernel(
               + offs_m[:, None] * stride_om + offs_d[None, :] * stride_od)
     tl.store(o_ptrs, acc.to(O.dtype.element_ty), mask=offs_m[:, None] < n_ctx)
 
+    if WRITE_LSE:
+        # backward 需要的行统计量:LSE = m + log(l)。等价于官方 FA2 的
+        # softmax_lse;有了它 backward 里 p = exp(s - LSE) 直接就是归一化
+        # 后的 P(省掉一次除)。越界填充行 l_i=0 → log(0)=-inf → LSE=-inf,
+        # backward 侧对所有越界行整体做 mask,不会污染。
+        # 【易错】用 LSE 自己的 stride,不能借用 O 的:O 是 (B,Hq,S,D) 而 LSE 是
+        # (B,Hq,S),借用会把偏移放大 D 倍 → 越界写(初版即因此触发 illegal access)
+        tl.store(LSE + b * stride_lb + hq * stride_lh + offs_m * stride_lm,
+                 m_i + tl.log(l_i), mask=offs_m < n_ctx)
+
 
 def fa2_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
                 causal: bool = True, sm_scale: float | None = None,
                 block_m: int | None = None, block_n: int = 64,
                 num_warps: int | None = None,
-                num_stages: int | None = None) -> torch.Tensor:
+                num_stages: int | None = None,
+                return_lse: bool = False):
     """q: (B, Hq, S, D); k/v: (B, Hkv, S, D),Hq 必须是 Hkv 的整数倍。
 
     默认 tile BM128/BN64/w8/s2 来自 EXP-T01 扫描:4K 上 BM128 比 BM64 +17%,
     BN=128 撞 shared memory 上限 OOM。tile 按 dtype 自适应:fp32 的 tile
     字节翻倍,BM128 会超 Ada 100KB shared memory 上限(EXP-T01 实测),故
-    fp32 降 BM32/w4/s1(校验路线,只求精确不求峰值)。"""
+    fp32 降 BM32/w4/s1(校验路线,只求精确不求峰值)。
+
+    return_lse=True 时额外返回 LSE = m + log(l)(形状 (B, Hq, S), fp32)——
+    这是 backward 需要的行统计量,等价于官方 FA2 存的 softmax_lse。
+    默认 False 保持与 EXP-T01 既有接口/性能口径完全一致。
+    """
     B, Hq, S, D = q.shape
     if block_m is None:
         block_m = 32 if q.dtype == torch.float32 else 128
@@ -152,14 +170,18 @@ def fa2_forward(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
     if sm_scale is None:
         sm_scale = D ** -0.5
     o = torch.empty_like(q)
+    lse = torch.empty(B, Hq, S, device=q.device, dtype=torch.float32) if return_lse else None
     grid = (triton.cdiv(S, block_m), B * Hq)
     _fa2_fwd_kernel[grid](
-        q, k, v, o, sm_scale,
+        q, k, v, o, lse if return_lse else o, sm_scale,
         *q.stride(), *k.stride(), *v.stride(), *o.stride(),
+        *(lse.stride()[:2] + (lse.stride(2),) if return_lse
+          else (o.stride(0), o.stride(1), o.stride(2))),
         S,
         NUM_Q_HEADS=Hq, GQA_GROUP=Hq // Hkv, HEAD_DIM=D,
         BLOCK_M=block_m, BLOCK_N=block_n, IS_CAUSAL=causal,
         IEEE_DOT=(q.dtype == torch.float32),
+        WRITE_LSE=return_lse,
         num_warps=num_warps, num_stages=num_stages,
     )
-    return o
+    return (o, lse) if return_lse else o

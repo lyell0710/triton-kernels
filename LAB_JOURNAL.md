@@ -73,3 +73,17 @@
 **踩坑（rope 粒度试错三轮，值得复刻的诊断路径）**：①一 program 一（token，head） → 100 万 program，调度开销吃掉一半；②一 program 一 token + 二维 tile → 行跨度 D， 访存拆成半事务；③q/k 合进一个 kernel 用 mask 选 → 有效带宽恰好减半，说明 **Triton 的 mask 保证语义正确、不保证被 mask 掉的那路不发事务**。另有一次假警报：测出「恰好慢 2 倍」，换粒度与加 tl.max_contiguous 都无效， dump PTX 看到 ld.global.v4.b32 证明向量化没问题，单独测该 kernel 得 907 GB/s， 最后查出是对方 bench 把 clone 写进了计时闭包。
 
 **下一步**：三个 kernel 未做 autotune（仅 rope 扫过一次）；可选。
+
+## 2026-09-16 · EXP-T10 Triton FA2 backward：补齐 T01 的"仅 forward"缺口
+
+**做了什么**：从零写 FA2 反向（`src/fa2_bwd.py`，三个 kernel：preprocess 求 Δ、dK/dV、dQ），并给 forward 加 `return_lse=True` 输出行统计量 LSE=m+log(l)。正确性对 **torch autograd**（朴素 fp32 物化 attention 的反向）逐梯度比对；性能对 torch SDPA-FLASH 的 backward，3 轮 mean±std。
+
+**为什么（决策依据）**：EXP-T01 §7 明确登记"仅 forward"是缺口；且 backward 是 FA2 论文里 **recomputation** 的所在地——forward 不存 S×S 的 P、只存 LSE（空间 O(S) 而非 O(S²)），backward 需要 P 时现场用 Q·Kᵀ 重算。这不是"优化技巧"，是算法设计的一部分，属于算子岗必答项。
+
+**关键数字**：正确性 **6/6**（三梯度 max abs err ≤4.8e-3，gate 2e-2），覆盖 GQA 2:1/4:1、非整除 S=777、非 causal、双 head_dim、Qwen3-8B 形状族。性能（3 轮）：**S=4096 达 SDPA-flash backward 的 91.2%±0.2%、S=2048 达 87.8%±0.3%**；S=512/1024 落在 SDPA 侧不稳区（同实验单轮 0.2809 vs 3 轮 0.4312），**不主张小尺寸反超**，只保证自己可复现（±0.2%）。backward 的 66.5 TFLOPS 低于 forward 的 123 ——重算要再读一遍 Q/K/V/dO，算术强度更低，这是 recomputation 的代价而非缺陷。
+
+**踩到三个 bug（已全部修，按"指纹→根因"记入 §7）**：① dKdV 用 q 的 stride 索引 LSE（LSE 是 (B,Hq,S)，偏移放大 D 倍）→ illegal access + nan；② forward 的 LSE store 用了 O 的 stride（同类错的反向版）→ 越界写；③ 修好后出现**"dv 完全正确而 dq/dk 整体放大 8 倍"**——根因是漏了 scale 的梯度链（s=scale·q·kᵀ ⟹ ∂s/∂q=scale·k），√D=8 恰是倍数，而 dv 不经过 scale 所以一直对。**这个单边正确的指纹直接指向根因**。排查法：把 kernel 输出与手写公式、autograd 三者并排——kernel 与手写公式吻合到 8e-3、手写公式与 autograd 差 8.0 倍，一步就把"kernel 写错"排除。
+
+**产物路径**：`src/fa2_bwd.py`、`scripts/test_fa2_bwd.py`、`src/fa2_fwd.py`（+return_lse）；`records/EXP-T10_fa2_backward.md`；`data/EXP-T10/*_fa2_bwd_r{1,2,3}.json`、`data/derived/exp-t10_stability_3rounds.csv`。
+
+**下一步**：① split-K（长序列下 dK/dV 的 M 循环是串行瓶颈，与 EXP-T04 同构）；② GQA 组内求和的并行归约；③ 未做 dropout/alibi/paged，未测 S>4096。
