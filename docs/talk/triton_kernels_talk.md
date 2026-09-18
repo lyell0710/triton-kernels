@@ -1,6 +1,6 @@
 # 面试讲稿 · triton-kernels(现行唯一版,2026-08-24)
 
-> 用法规则：每句量化主张先过 LEDGER.md 措辞红线表；括号内限定词是措辞的一部分，引用时不得剥离。全部数字=**单轮** bench 的存盘 raw 值（注明"终端级"者除外）；≥3 轮 stability 待 GPU 空闲补测（各 record §7 backlog）。
+> 用法规则：每句量化主张先过 LEDGER.md 措辞红线表；括号内限定词是措辞的一部分，引用时不得剥离。全部数字=存盘 raw 值（注明"终端级"者除外；仍标**单轮**者即确为单轮口径，如 T03 binding 端到端）；≥3 轮 stability 已闭环（各 record §7 backlog 已清），headline 数字改引 3 轮 mean/std。
 
 ## 0. 三十秒开场
 
