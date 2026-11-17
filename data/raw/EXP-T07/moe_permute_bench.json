@@ -1,0 +1,18 @@
+{
+ "provenance": "# provenance: env=v0.25.1-venv sha=7d682abdd0 cmd=\"test_moe_permute.py T4096 D2048 E60 topk4\" date=2026-08-24T02:16:01Z gpu=\"NVIDIA GeForce RTX 4090\" driver=610.57.04",
+ "shape": {
+  "T": 4096,
+  "D": 2048,
+  "E": 60,
+  "topk": 4
+ },
+ "roundtrip_err": 0.0076329708099365234,
+ "monotonic": true,
+ "bench": {
+  "triton_permute_ms": 0.0807,
+  "torch_permute_ms": 0.1456,
+  "triton_unpermute_ms": 0.0844,
+  "torch_unpermute_ms": 1.0542,
+  "index_build_ms": 0.2662
+ }
+}

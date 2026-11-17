@@ -1,0 +1,43 @@
+{
+ "provenance": "# provenance: env=v0.25.1-venv(triton3.6,torch2.11) sha=2f0ba4b cmd=\"python test_flash_decode.py (EXP-T04 \u539f\u534f\u8bae H16/8 bf16, \u4e09\u81c2\u542b\u53e3\u5f84\u62c6\u5206, stability r1)\" date=2026-08-25T15:24:34Z gpu=\"NVIDIA GeForce RTX 4090\" driver=610.57.04",
+ "correctness": {
+  "skv512": 0.0,
+  "skv2048": 0.0,
+  "skv8192": 3.0517578125e-05,
+  "skv32768": 6.103515625e-05
+ },
+ "bench": {
+  "skv512": {
+   "flash_decode_ms": 0.09281,
+   "naive_prerepeat_ms": 0.07908,
+   "speedup_vs_prerepeat": 0.852,
+   "naive_incl_repeat_ms": 0.12762,
+   "speedup_vs_incl_repeat": 1.375,
+   "pass": true
+  },
+  "skv2048": {
+   "flash_decode_ms": 0.09665,
+   "naive_prerepeat_ms": 0.08481,
+   "speedup_vs_prerepeat": 0.877,
+   "naive_incl_repeat_ms": 0.12841,
+   "speedup_vs_incl_repeat": 1.329,
+   "pass": true
+  },
+  "skv8192": {
+   "flash_decode_ms": 0.09349,
+   "naive_prerepeat_ms": 0.08182,
+   "speedup_vs_prerepeat": 0.875,
+   "naive_incl_repeat_ms": 0.17253,
+   "speedup_vs_incl_repeat": 1.845,
+   "pass": true
+  },
+  "skv32768": {
+   "flash_decode_ms": 0.14728,
+   "naive_prerepeat_ms": 0.34051,
+   "speedup_vs_prerepeat": 2.312,
+   "naive_incl_repeat_ms": 0.7823,
+   "speedup_vs_incl_repeat": 5.312,
+   "pass": true
+  }
+ }
+}

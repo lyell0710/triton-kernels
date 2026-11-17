@@ -1,0 +1,6 @@
+# manifest — data/raw/EXP-T02/(2026-08-24 审计补录)
+# 勘注:本目录数据文件名缺 UTC 前缀(建仓初期产物,grandfather 保留原名);
+# 按铁律 3/4 不重命名、不改内容,溯源以文件内 provenance + 本 manifest 为准。
+file: ew_gemm_bench.json
+sha256: 293e983238bc975476da6d4a89ef8f9f8fb2b256a208b880d5346b3040829c9c
+provenance: provenance: env=v0.25.1-venv(triton3.6) sha=pre-commit cmd="test_ew_gemm.py (含大尺寸 launch-overhead 验证点)" date=2026-08-23T23:07:32+00:00 gpu="NVIDIA GeForce RTX 4090" driver=610.57.04

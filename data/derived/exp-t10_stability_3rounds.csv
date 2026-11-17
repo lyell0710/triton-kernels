@@ -1,0 +1,6 @@
+# provenance: env=v0.25.1(triton3.6/torch2.11) sha=n/a date=2026-09-15T16:37Z gpu=RTX4090 driver=610.57.04 exp=EXP-T10 cmd="python scripts/test_fa2_bwd.py" rounds=3
+S,ours_ms_mean,ours_ms_std,sdpa_flash_ms_mean,sdpa_flash_ms_std,efficiency_pct,vs_naive_fp32_x
+512,0.20117,0.00035,0.43123,0.00103,214.37,9.47
+1024,0.42303,0.02623,0.49963,0.01580,118.11,10.40
+2048,1.27290,0.00348,1.11793,0.00266,87.83,13.54
+4096,4.14977,0.00760,3.78377,0.00735,91.18,nan

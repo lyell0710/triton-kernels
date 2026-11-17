@@ -1,0 +1,38 @@
+{
+ "provenance": "# provenance: env=v0.25.1-venv(triton3.6,torch2.11) sha=175b14a cmd=\"python scripts/test_fa2.py (stability r2)\" date=2026-08-24T17:59:59Z gpu=\"NVIDIA GeForce RTX 4090\" driver=610.57.04",
+ "correctness_pass": true,
+ "bench": [
+  {
+   "S": 512,
+   "ours_ms": 0.0397,
+   "sdpa_flash_ms": 0.0334,
+   "naive_fp32_ms": 0.3189,
+   "ours_tflops": 54.2,
+   "sdpa_tflops": 64.3
+  },
+  {
+   "S": 1024,
+   "ours_ms": 0.1225,
+   "sdpa_flash_ms": 0.0923,
+   "naive_fp32_ms": 1.7214,
+   "ours_tflops": 70.1,
+   "sdpa_tflops": 93.1
+  },
+  {
+   "S": 2048,
+   "ours_ms": 0.3291,
+   "sdpa_flash_ms": 0.2819,
+   "naive_fp32_ms": 6.6954,
+   "ours_tflops": 104.4,
+   "sdpa_tflops": 121.9
+  },
+  {
+   "S": 4096,
+   "ours_ms": 1.1181,
+   "sdpa_flash_ms": 0.9735,
+   "naive_fp32_ms": NaN,
+   "ours_tflops": 122.9,
+   "sdpa_tflops": 141.2
+  }
+ ]
+}

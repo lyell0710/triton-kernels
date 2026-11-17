@@ -1,0 +1,85 @@
+{
+ "provenance": "env=py312(triton3.6/torch2.11) sha=a438d04 cmd=\"python scripts/probe_smem_regs.py\" date=2026-08-25T23:06:51+00:00 gpu=\"NVIDIA GeForce RTX 4090\" driver=610.57.04",
+ "env": {
+  "gpu": "NVIDIA GeForce RTX 4090",
+  "triton": "3.6.0",
+  "torch": "2.11.0+cu130"
+ },
+ "gemm_stages": [
+  {
+   "num_stages": 1,
+   "shared_bytes": 32768,
+   "n_regs": 162,
+   "n_spills": 0,
+   "num_warps": 8
+  },
+  {
+   "num_stages": 2,
+   "shared_bytes": 32768,
+   "n_regs": 136,
+   "n_spills": 0,
+   "num_warps": 8
+  },
+  {
+   "num_stages": 3,
+   "shared_bytes": 65536,
+   "n_regs": 170,
+   "n_spills": 0,
+   "num_warps": 8
+  },
+  {
+   "num_stages": 4,
+   "shared_bytes": 98304,
+   "n_regs": 178,
+   "n_spills": 0,
+   "num_warps": 8
+  }
+ ],
+ "fa2_blockn": [
+  {
+   "block_n": 32,
+   "num_stages": 2,
+   "shared_bytes": 49152,
+   "n_regs": 192,
+   "n_spills": 0,
+   "num_warps": 8
+  },
+  {
+   "block_n": 32,
+   "num_stages": 3,
+   "shared_bytes": 65536,
+   "n_regs": 200,
+   "n_spills": 0,
+   "num_warps": 8
+  },
+  {
+   "block_n": 64,
+   "num_stages": 2,
+   "shared_bytes": 65536,
+   "n_regs": 213,
+   "n_spills": 0,
+   "num_warps": 8
+  },
+  {
+   "block_n": 64,
+   "num_stages": 3,
+   "shared_bytes": 98304,
+   "n_regs": 198,
+   "n_spills": 0,
+   "num_warps": 8
+  },
+  {
+   "block_n": 128,
+   "num_stages": 2,
+   "shared_bytes": 98304,
+   "n_regs": 255,
+   "n_spills": 0,
+   "num_warps": 8
+  },
+  {
+   "block_n": 128,
+   "num_stages": 3,
+   "error": "OutOfResources: out of resource: shared memory, Required: 163840, Hardware limit: 101376. Reducing block sizes or `num_stages` may help."
+  }
+ ]
+}

@@ -1,0 +1,35 @@
+{
+ "provenance": "# provenance: env=v0.25.1-venv(triton3.6,torch2.11) sha=175b14a cmd=\"python scripts/test_fp8_gemm.py (stability r2)\" date=2026-08-24T18:00:43Z gpu=\"NVIDIA GeForce RTX 4090\" driver=610.57.04",
+ "correctness": {
+  "square4k": {
+   "kernel_relerr": 0.00018526602070778608,
+   "quant_relerr_vs_fp16": 0.036263685673475266
+  },
+  "qwen8b_mlp_up": {
+   "kernel_relerr": 0.00018864829326048493,
+   "quant_relerr_vs_fp16": 0.03892598673701286
+  }
+ },
+ "bench": {
+  "square4k": {
+   "fp8_prequant_ms": 0.601,
+   "fp8_e2e_online_quant_ms": 1.8875,
+   "fp16_triton_ms": 0.8861,
+   "fp16_cublas_ms": 0.8619,
+   "fp8_prequant_tflops": 228.7,
+   "fp8_e2e_online_quant_tflops": 72.8,
+   "fp16_triton_tflops": 155.1,
+   "fp16_cublas_tflops": 159.5
+  },
+  "qwen8b_mlp_up": {
+   "fp8_prequant_ms": 0.901,
+   "fp8_e2e_online_quant_ms": 3.2055,
+   "fp16_triton_ms": 1.3207,
+   "fp16_cublas_ms": 1.3302,
+   "fp8_prequant_tflops": 228.8,
+   "fp8_e2e_online_quant_tflops": 64.3,
+   "fp16_triton_tflops": 156.1,
+   "fp16_cublas_tflops": 155.0
+  }
+ }
+}

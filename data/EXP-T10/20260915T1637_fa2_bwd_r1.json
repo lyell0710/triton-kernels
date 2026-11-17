@@ -1,0 +1,38 @@
+{
+ "provenance": "env=v0.25.1(triton3.6/torch2.11) sha=n/a date=2026-09-15T16:37:29Z gpu=RTX4090 driver=610.57.04 exp=EXP-T10 round=1 cmd=\"python scripts/test_fa2_bwd.py\"",
+ "correctness_pass": true,
+ "bench": [
+  {
+   "S": 512,
+   "ours_ms": 0.2008,
+   "sdpa_flash_ms": 0.4301,
+   "naive_fp32_ms": 1.9057,
+   "ours_tflops": 21.4,
+   "sdpa_tflops": 10.0
+  },
+  {
+   "S": 1024,
+   "ours_ms": 0.3929,
+   "sdpa_flash_ms": 0.4939,
+   "naive_fp32_ms": 4.4003,
+   "ours_tflops": 43.7,
+   "sdpa_tflops": 34.8
+  },
+  {
+   "S": 2048,
+   "ours_ms": 1.2701,
+   "sdpa_flash_ms": 1.121,
+   "naive_fp32_ms": 17.2355,
+   "ours_tflops": 54.1,
+   "sdpa_tflops": 61.3
+  },
+  {
+   "S": 4096,
+   "ours_ms": 4.1413,
+   "sdpa_flash_ms": 3.7764,
+   "naive_fp32_ms": NaN,
+   "ours_tflops": 66.4,
+   "sdpa_tflops": 72.8
+  }
+ ]
+}

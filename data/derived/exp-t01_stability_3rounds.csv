@@ -1,0 +1,25 @@
+# provenance: derived from data/raw/EXP-T01/*_stability_r{1,2,3}.json, list-aware aggregator (non-finite skipped), 2026-08-24
+metric,mean,std,rel_std_pct
+bench[0].S,512,0,0.00
+bench[0].naive_fp32_ms,0.319567,0.000987,0.31
+bench[0].ours_ms,0.0389667,0.000874,2.24
+bench[0].ours_tflops,55.1333,1.14,2.06
+bench[0].sdpa_flash_ms,0.0333667,5.77e-05,0.17
+bench[0].sdpa_tflops,64.3333,0.0577,0.09
+bench[1].S,1024,0,0.00
+bench[1].naive_fp32_ms,1.7162,0.00464,0.27
+bench[1].ours_ms,0.122633,0.000321,0.26
+bench[1].ours_tflops,70.0333,0.208,0.30
+bench[1].sdpa_flash_ms,0.0925667,0.000306,0.33
+bench[1].sdpa_tflops,92.8333,0.306,0.33
+bench[2].S,2048,0,0.00
+bench[2].naive_fp32_ms,6.69433,0.00304,0.05
+bench[2].ours_ms,0.329567,0.000723,0.22
+bench[2].ours_tflops,104.267,0.231,0.22
+bench[2].sdpa_flash_ms,0.2818,0.000265,0.09
+bench[2].sdpa_tflops,121.9,0.1,0.08
+bench[3].S,4096,0,0.00
+bench[3].ours_ms,1.11843,0.00153,0.14
+bench[3].ours_tflops,122.867,0.153,0.12
+bench[3].sdpa_flash_ms,0.974867,0.00237,0.24
+bench[3].sdpa_tflops,141,0.346,0.25

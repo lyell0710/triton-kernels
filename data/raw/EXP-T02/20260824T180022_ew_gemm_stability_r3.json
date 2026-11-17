@@ -1,0 +1,67 @@
+{
+ "provenance": "# provenance: env=v0.25.1-venv(triton3.6,torch2.11) sha=175b14a cmd=\"python scripts/test_ew_gemm.py (stability r3)\" date=2026-08-24T18:00:22Z gpu=\"NVIDIA GeForce RTX 4090\" driver=610.57.04",
+ "correctness": {
+  "rmsnorm_2048x1024": 0.0009765625,
+  "rmsnorm_2048x4096": 0.00390625,
+  "softmax_1024x1024": 3.725290298461914e-09,
+  "softmax_1024x1500": 3.725290298461914e-09,
+  "softmax_8192x8192": 1.862645149230957e-09,
+  "int8q_1024x1024_maxabs": 0.019999980926513672,
+  "int8q_scale_err_vs_ref": 0.0,
+  "gemm_square4k_relerr": 0.0007163323782234957,
+  "gemm_qwen8b_mlp_up_relerr": 0.0007336757153338225
+ },
+ "bench": {
+  "rmsnorm_2048x1024": {
+   "triton_ms": 0.03479,
+   "pytorch_eager_ms": 0.10621
+  },
+  "rmsnorm_2048x4096": {
+   "triton_ms": 0.03631,
+   "pytorch_eager_ms": 0.23068
+  },
+  "softmax_1024x1024": {
+   "triton_ms": 0.03677,
+   "pytorch_ms": 0.00864
+  },
+  "softmax_1024x1500": {
+   "triton_ms": 0.03651,
+   "pytorch_ms": 0.00862
+  },
+  "softmax_8192x8192": {
+   "triton_ms": 0.5849,
+   "pytorch_ms": 0.58226
+  },
+  "int8q_8192x8192": {
+   "triton_ms": 0.3619
+  },
+  "int8q_1024x1024": {
+   "triton_ms": 0.04256,
+   "pytorch_eager_ms": 0.1009
+  },
+  "gemm_square4k": {
+   "cublas_ms": 0.856,
+   "stages1_ms": 1.0447,
+   "stages1_tflops": 131.6,
+   "stages2_ms": 1.0302,
+   "stages2_tflops": 133.4,
+   "stages3_ms": 0.8649,
+   "stages3_tflops": 158.9,
+   "stages4_ms": 0.8814,
+   "stages4_tflops": 155.9,
+   "cublas_tflops": 160.6
+  },
+  "gemm_qwen8b_mlp_up": {
+   "cublas_ms": 1.3993,
+   "stages1_ms": 1.6225,
+   "stages1_tflops": 127.1,
+   "stages2_ms": 1.6057,
+   "stages2_tflops": 128.4,
+   "stages3_ms": 1.372,
+   "stages3_tflops": 150.3,
+   "stages4_ms": 1.328,
+   "stages4_tflops": 155.2,
+   "cublas_tflops": 147.3
+  }
+ }
+}

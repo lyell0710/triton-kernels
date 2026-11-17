@@ -1,0 +1,17 @@
+{
+ "provenance": "# provenance: env=v0.25.1-venv sha=9781cddc9f cmd=\"test_cudagraph.py N=100\" date=2026-08-24T02:03:24Z gpu=\"NVIDIA GeForce RTX 4090\" driver=610.57.04",
+ "N": 100,
+ "shape": "1024x1024 fp32",
+ "total_ms": {
+  "eager_loop_ms": 3.6757821403443813,
+  "graph_replay_ms": 0.311313618440181,
+  "torch_loop_ms": 0.7932799402624369,
+  "torch_graph_ms": 0.4035865794867277
+ },
+ "per_call_us": {
+  "eager_loop_ms": 36.76,
+  "graph_replay_ms": 3.11,
+  "torch_loop_ms": 7.93,
+  "torch_graph_ms": 4.04
+ }
+}
